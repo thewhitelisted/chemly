@@ -525,14 +525,49 @@ export function ChemCanvas({
     const mouseX = event.clientX - rect.left;
     const mouseY = event.clientY - rect.top;
     
-    // Calculate zoom factor
-    const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1;
-    const newScale = Math.max(0.1, Math.min(5, scale * zoomFactor));
+    // Calculate zoom with constant 10% increments
+    const zoomIncrement = 0.1; // 10%
+    const newScale = event.deltaY > 0 
+      ? Math.max(0.2, scale - zoomIncrement) 
+      : Math.min(2, scale + zoomIncrement);
     
     // Calculate new offset to zoom towards mouse position
     const newOffset = {
       x: mouseX - (mouseX - canvasOffset.x) * (newScale / scale),
       y: mouseY - (mouseY - canvasOffset.y) * (newScale / scale)
+    };
+    
+    onCanvasTransformChange(newOffset, newScale);
+  }, [scale, canvasOffset, onCanvasTransformChange]);
+
+  // Handle zoom slider change
+  const handleZoomSliderChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const sliderValue = parseFloat(event.target.value);
+    
+    // Convert slider value (0-100) to scale (0.2-2.0)
+    // 50 = center = 100% (scale 1.0)
+    // 0 = left = minimum zoom (scale 0.2)
+    // 100 = right = maximum zoom (scale 2.0)
+    let newScale: number;
+    if (sliderValue <= 50) {
+      // Left half: 0.2 to 1.0
+      newScale = 0.2 + (sliderValue / 50) * (1.0 - 0.2);
+    } else {
+      // Right half: 1.0 to 2.0
+      newScale = 1.0 + ((sliderValue - 50) / 50) * (2.0 - 1.0);
+    }
+    
+    // Get center of canvas for zoom reference point
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    
+    // Calculate new offset to zoom towards center
+    const newOffset = {
+      x: centerX - (centerX - canvasOffset.x) * (newScale / scale),
+      y: centerY - (centerY - canvasOffset.y) * (newScale / scale)
     };
     
     onCanvasTransformChange(newOffset, newScale);
@@ -704,7 +739,7 @@ export function ChemCanvas({
   };
 
   return (
-    <div className="flex-1 bg-white relative overflow-hidden">
+    <div className="flex-1 bg-gradient-to-br from-gray-50 to-white relative overflow-hidden">
       <svg
         ref={svgRef}
         className="w-full h-full"
@@ -743,7 +778,7 @@ export function ChemCanvas({
               d={`M ${GRID_SIZE} 0 L 0 0 0 ${GRID_SIZE}`}
               fill="none"
               stroke="#d1d5db"
-              strokeWidth="2"
+              strokeWidth="2.5"
             />
           </pattern>
         </defs>
@@ -780,6 +815,92 @@ export function ChemCanvas({
           {molecule.atoms.map(renderAtom)}
         </g>
       </svg>
+
+      {/* Zoom Controls */}
+      <style>
+        {`
+          .slider::-webkit-slider-thumb {
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #000000;
+            cursor: pointer;
+            border: 2px solid #ffffff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+          }
+          .slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #000000;
+            cursor: pointer;
+            border: 2px solid #ffffff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+          }
+          .slider::-webkit-slider-track {
+            height: 8px;
+            border-radius: 4px;
+          }
+          .slider::-moz-range-track {
+            height: 8px;
+            border-radius: 4px;
+          }
+        `}
+      </style>
+      <div
+        className="absolute bottom-4 right-4 rounded-xl shadow-2xl border border-gray-200 p-3" 
+        style={{ 
+          backgroundColor: 'rgba(255, 255, 255, 0.6)'
+        }}
+      >
+        <div className="flex items-center gap-2">
+          <svg 
+            className="w-4 h-4 text-gray-900" 
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              strokeWidth={2} 
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" 
+            />
+          </svg>
+          <div className="flex items-center gap-2">
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              value={
+                // Convert current scale back to slider value (0-100)
+                scale <= 1.0 
+                  ? ((scale - 0.2) / (1.0 - 0.2)) * 50
+                  : 50 + ((scale - 1.0) / (2.0 - 1.0)) * 50
+              }
+              onChange={handleZoomSliderChange}
+              className="w-36 h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer slider"
+              style={{
+                background: `linear-gradient(to right, #000000 0%, #000000 ${
+                  scale <= 1.0 
+                    ? ((scale - 0.2) / (1.0 - 0.2)) * 50
+                    : 50 + ((scale - 1.0) / (2.0 - 1.0)) * 50
+                }%, #6b7280 ${
+                  scale <= 1.0 
+                    ? ((scale - 0.2) / (1.0 - 0.2)) * 50
+                    : 50 + ((scale - 1.0) / (2.0 - 1.0)) * 50
+                }%, #6b7280 100%)`,
+                WebkitAppearance: 'none',
+              }}
+            />
+          </div>
+          <span className="text-xs font-mono font-bold min-w-[2.5rem] text-center text-gray-900">
+            {Math.round(scale * 100)}%
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
