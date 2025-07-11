@@ -5,10 +5,13 @@ import { HydrogenManager } from '../utils/hydrogenManager';
 
 interface ChemCanvasProps {
   molecule: Molecule;
-  selectedTool: 'atom' | 'bond' | 'select' | 'eraser';
+  selectedTool: 'atom' | 'bond' | 'select' | 'eraser' | 'pan';
   selectedElement: ElementSymbol;
   selectedBondType: BondType;
+  canvasOffset: Point;
+  scale: number;
   onMoleculeChange: (molecule: Molecule) => void;
+  onCanvasTransformChange: (offset: Point, scale: number) => void;
 }
 
 const ATOM_RADIUS = 15;
@@ -32,7 +35,10 @@ export function ChemCanvas({
   selectedTool,
   selectedElement,
   selectedBondType,
+  canvasOffset,
+  scale,
   onMoleculeChange,
+  onCanvasTransformChange,
 }: ChemCanvasProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragStart, setDragStart] = useState<Point | null>(null);
@@ -42,6 +48,8 @@ export function ChemCanvas({
   const [hoveredAtom, setHoveredAtom] = useState<string | null>(null);
   const [selectedAtom, setSelectedAtom] = useState<string | null>(null);
   const [recentDragEnd, setRecentDragEnd] = useState(false);
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState<Point | null>(null);
   
   // Track if we're currently updating hydrogens to prevent infinite loops
   const isUpdatingHydrogens = useRef(false);
@@ -105,11 +113,23 @@ export function ChemCanvas({
     if (!svgRef.current) return { x: 0, y: 0 };
     
     const rect = svgRef.current.getBoundingClientRect();
+    const rawX = clientX - rect.left;
+    const rawY = clientY - rect.top;
+    
+    // Transform from screen coordinates to world coordinates
     return {
-      x: clientX - rect.left,
-      y: clientY - rect.top,
+      x: (rawX - canvasOffset.x) / scale,
+      y: (rawY - canvasOffset.y) / scale,
     };
-  }, []);
+  }, [canvasOffset, scale]);
+
+  // Transform world coordinates to screen coordinates for rendering
+  const worldToScreen = useCallback((point: Point): Point => {
+    return {
+      x: point.x * scale + canvasOffset.x,
+      y: point.y * scale + canvasOffset.y,
+    };
+  }, [canvasOffset, scale]);
 
   const snapToGrid = (point: Point): Point => {
     return {
@@ -263,7 +283,17 @@ export function ChemCanvas({
     const point = getCanvasPoint(event.clientX, event.clientY);
     const snappedPoint = snapToGrid(point);
     
-    if (selectedTool === 'select') {
+    if (selectedTool === 'pan') {
+      // Start panning
+      const rect = svgRef.current?.getBoundingClientRect();
+      if (rect) {
+        setIsPanning(true);
+        setPanStart({
+          x: event.clientX - rect.left,
+          y: event.clientY - rect.top
+        });
+      }
+    } else if (selectedTool === 'select') {
       // Check if we're clicking near the selected atom first
       if (selectedAtom) {
         const selectedAtomObj = molecule.atoms.find(a => a.id === selectedAtom);
@@ -307,8 +337,33 @@ export function ChemCanvas({
     const point = getCanvasPoint(event.clientX, event.clientY);
     const snappedPoint = snapToGrid(point);
 
-    // Update hovered atom for cursor changes (only when not dragging)
-    if (!draggedAtom) {
+    if (selectedTool === 'pan' && isPanning && panStart) {
+      // Handle panning
+      const rect = svgRef.current?.getBoundingClientRect();
+      if (rect) {
+        const currentScreenPoint = {
+          x: event.clientX - rect.left,
+          y: event.clientY - rect.top
+        };
+        
+        const deltaX = currentScreenPoint.x - panStart.x;
+        const deltaY = currentScreenPoint.y - panStart.y;
+        
+        const newOffset = {
+          x: canvasOffset.x + deltaX,
+          y: canvasOffset.y + deltaY
+        };
+        
+        onCanvasTransformChange(newOffset, scale);
+        
+        // Update panStart for next movement
+        setPanStart(currentScreenPoint);
+      }
+      return;
+    }
+
+    // Update hovered atom for cursor changes (only when not dragging or panning)
+    if (!draggedAtom && !isPanning) {
       const hoveredAtomId = findAtomAtPoint(point)?.id || null;
       setHoveredAtom(hoveredAtomId);
     }
@@ -340,10 +395,17 @@ export function ChemCanvas({
       // Preview bond creation
       setPreviewBond({ start: dragStart, end: snappedPoint });
     }
-  }, [selectedTool, draggedAtom, dragStart, isDragging, selectedAtom, getCanvasPoint, molecule, onMoleculeChange]);
+  }, [selectedTool, draggedAtom, dragStart, isDragging, selectedAtom, isPanning, panStart, canvasOffset, scale, getCanvasPoint, molecule, onMoleculeChange, onCanvasTransformChange]);
 
   const handleMouseUp = useCallback((event: React.MouseEvent) => {
-    console.log('MouseUp:', { draggedAtom, isDragging, selectedAtom });
+    console.log('MouseUp:', { draggedAtom, isDragging, selectedAtom, isPanning });
+    
+    if (selectedTool === 'pan' && isPanning) {
+      // End panning
+      setIsPanning(false);
+      setPanStart(null);
+      return;
+    }
     
     if (selectedTool === 'select' && draggedAtom) {
       // End atom dragging
@@ -450,7 +512,31 @@ export function ChemCanvas({
       setDragStart(null);
       setPreviewBond(null);
     }
-  }, [selectedTool, draggedAtom, isDragging, dragStart, molecule, selectedBondType, selectedElement, getCanvasPoint, onMoleculeChange]);
+  }, [selectedTool, draggedAtom, isDragging, dragStart, isPanning, molecule, selectedBondType, selectedElement, getCanvasPoint, onMoleculeChange]);
+
+  // Handle wheel zoom
+  const handleWheel = useCallback((event: React.WheelEvent) => {
+    event.preventDefault();
+    
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    
+    // Get mouse position relative to canvas
+    const mouseX = event.clientX - rect.left;
+    const mouseY = event.clientY - rect.top;
+    
+    // Calculate zoom factor
+    const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1;
+    const newScale = Math.max(0.1, Math.min(5, scale * zoomFactor));
+    
+    // Calculate new offset to zoom towards mouse position
+    const newOffset = {
+      x: mouseX - (mouseX - canvasOffset.x) * (newScale / scale),
+      y: mouseY - (mouseY - canvasOffset.y) * (newScale / scale)
+    };
+    
+    onCanvasTransformChange(newOffset, newScale);
+  }, [scale, canvasOffset, onCanvasTransformChange]);
 
   const renderBond = (bond: Bond) => {
     const atom1 = molecule.atoms.find(a => a.id === bond.sourceAtomId);
@@ -626,7 +712,9 @@ export function ChemCanvas({
           cursor: selectedTool === 'atom' ? 'crosshair' : 
                   selectedTool === 'bond' ? 'crosshair' : 
                   selectedTool === 'select' ? (hoveredAtom ? 'move' : 'default') :
-                  selectedTool === 'eraser' ? 'pointer' : 'default'
+                  selectedTool === 'eraser' ? 'pointer' :
+                  selectedTool === 'pan' ? (isPanning ? 'move' : 'all-scroll') : 'default',
+          userSelect: 'none'
         }}
         onClick={handleCanvasClick}
         onMouseDown={handleMouseDown}
@@ -638,7 +726,10 @@ export function ChemCanvas({
           setDraggedAtom(null);
           setIsDragging(false);
           setHoveredAtom(null);
+          setIsPanning(false);
+          setPanStart(null);
         }}
+        onWheel={handleWheel}
       >
         {/* Grid Pattern */}
         <defs>
@@ -656,27 +747,38 @@ export function ChemCanvas({
             />
           </pattern>
         </defs>
-        <rect width="100%" height="100%" fill="url(#grid)" />
+        
+        {/* Background grid that extends infinitely */}
+        <rect 
+          x={-canvasOffset.x / scale - 10000} 
+          y={-canvasOffset.y / scale - 10000} 
+          width={20000} 
+          height={20000} 
+          fill="url(#grid)" 
+        />
 
-        {/* Render bonds first */}
-        {molecule.bonds.map(renderBond)}
+        {/* Main content group with transform */}
+        <g transform={`translate(${canvasOffset.x}, ${canvasOffset.y}) scale(${scale})`}>
+          {/* Render bonds first */}
+          {molecule.bonds.map(renderBond)}
 
-        {/* Preview bond */}
-        {previewBond && (
-          <line
-            x1={previewBond.start.x}
-            y1={previewBond.start.y}
-            x2={previewBond.end.x}
-            y2={previewBond.end.y}
-            stroke="#3b82f6"
-            strokeWidth="2"
-            strokeDasharray="5,5"
-            opacity="0.7"
-          />
-        )}
+          {/* Preview bond */}
+          {previewBond && (
+            <line
+              x1={previewBond.start.x}
+              y1={previewBond.start.y}
+              x2={previewBond.end.x}
+              y2={previewBond.end.y}
+              stroke="#3b82f6"
+              strokeWidth="2"
+              strokeDasharray="5,5"
+              opacity="0.7"
+            />
+          )}
 
-        {/* Render atoms on top */}
-        {molecule.atoms.map(renderAtom)}
+          {/* Render atoms on top */}
+          {molecule.atoms.map(renderAtom)}
+        </g>
       </svg>
     </div>
   );

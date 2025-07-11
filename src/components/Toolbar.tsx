@@ -1,13 +1,13 @@
-import { MousePointer, Eraser, Lightbulb } from 'lucide-react';
+import { MousePointer, Eraser, Lightbulb, Move } from 'lucide-react';
 import type { ElementSymbol, BondType } from '../types/chemistry';
 
 interface ToolbarProps {
   selectedElement: ElementSymbol;
   selectedBondType: BondType;
-  selectedTool: 'atom' | 'bond' | 'select' | 'eraser';
+  selectedTool: 'atom' | 'bond' | 'select' | 'eraser' | 'pan';
   onElementSelect: (element: ElementSymbol) => void;
   onBondTypeSelect: (bondType: BondType) => void;
-  onToolSelect: (tool: 'atom' | 'bond' | 'select' | 'eraser') => void;
+  onToolSelect: (tool: 'atom' | 'bond' | 'select' | 'eraser' | 'pan') => void;
 }
 
 const elements: { symbol: ElementSymbol; name: string; color: string }[] = [
@@ -53,6 +53,18 @@ export function Toolbar({
           title="Select Tool"
         >
           <MousePointer size={20} />
+        </button>
+        
+        <button
+          onClick={() => onToolSelect('pan')}
+          className={`p-3 rounded-lg transition-colors ${
+            selectedTool === 'pan'
+              ? 'bg-green-100 text-green-600'
+              : 'hover:bg-gray-100 text-gray-600'
+          }`}
+          title="Pan Tool"
+        >
+          <Move size={20} />
         </button>
         
         <button

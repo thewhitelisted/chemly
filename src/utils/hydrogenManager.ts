@@ -7,8 +7,8 @@ const ELEMENT_VALENCE: Record<string, number> = {
   C: 4,
   N: 3,
   O: 2,
-  P: 5,
-  S: 6,
+  P: 3,  // Common valence for phosphorus in organic chemistry
+  S: 2,  // Common valence for sulfur in organic chemistry
   F: 1,
   Cl: 1,
   Br: 1,

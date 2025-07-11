@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ChemCanvas } from './components/ChemCanvas';
 import { Toolbar } from './components/Toolbar';
 import { Sidebar } from './components/Sidebar';
-import type { DrawingState, ElementSymbol, BondType, Molecule } from './types/chemistry';
+import type { DrawingState, ElementSymbol, BondType, Molecule, Point } from './types/chemistry';
 
 function App() {
   const [drawingState, setDrawingState] = useState<DrawingState>({
@@ -29,7 +29,7 @@ function App() {
     setDrawingState(prev => ({ ...prev, selectedBondType: bondType, selectedTool: 'bond' }));
   };
 
-  const setSelectedTool = (tool: 'atom' | 'bond' | 'select' | 'eraser') => {
+  const setSelectedTool = (tool: 'atom' | 'bond' | 'select' | 'eraser' | 'pan') => {
     setDrawingState(prev => ({ ...prev, selectedTool: tool }));
   };
 
@@ -64,7 +64,10 @@ function App() {
           selectedTool={drawingState.selectedTool}
           selectedElement={drawingState.selectedElement}
           selectedBondType={drawingState.selectedBondType}
+          canvasOffset={drawingState.canvasOffset}
+          scale={drawingState.scale}
           onMoleculeChange={(molecule: Molecule) => updateDrawingState({ molecule })}
+          onCanvasTransformChange={(canvasOffset: Point, scale: number) => updateDrawingState({ canvasOffset, scale })}
         />
       </div>
 
