@@ -10,7 +10,7 @@ function App() {
       atoms: [],
       bonds: []
     },
-    selectedTool: 'atom',
+    selectedTool: 'select',
     selectedElement: 'C',
     canvasOffset: { x: 0, y: 0 },
     scale: 1
