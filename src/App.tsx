@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ChemCanvas } from './components/ChemCanvas';
 import { Toolbar } from './components/Toolbar';
 import { Sidebar } from './components/Sidebar';
-import type { DrawingState, ElementSymbol, BondType, Molecule, Point } from './types/chemistry';
+import type { DrawingState, ElementSymbol, Molecule, Point } from './types/chemistry';
 
 function App() {
   const [drawingState, setDrawingState] = useState<DrawingState>({
@@ -12,7 +12,6 @@ function App() {
     },
     selectedTool: 'atom',
     selectedElement: 'C',
-    selectedBondType: 'single',
     canvasOffset: { x: 0, y: 0 },
     scale: 1
   });
@@ -25,11 +24,7 @@ function App() {
     setDrawingState(prev => ({ ...prev, selectedElement: element, selectedTool: 'atom' }));
   };
 
-  const setSelectedBondType = (bondType: BondType) => {
-    setDrawingState(prev => ({ ...prev, selectedBondType: bondType, selectedTool: 'bond' }));
-  };
-
-  const setSelectedTool = (tool: 'atom' | 'bond' | 'select' | 'eraser' | 'pan') => {
+  const setSelectedTool = (tool: 'atom' | 'select' | 'eraser' | 'pan') => {
     setDrawingState(prev => ({ ...prev, selectedTool: tool }));
   };
 
@@ -47,10 +42,8 @@ function App() {
       {/* Left Toolbar */}
       <Toolbar
         selectedElement={drawingState.selectedElement}
-        selectedBondType={drawingState.selectedBondType}
         selectedTool={drawingState.selectedTool}
         onElementSelect={setSelectedElement}
-        onBondTypeSelect={setSelectedBondType}
         onToolSelect={setSelectedTool}
       />
       
@@ -63,7 +56,6 @@ function App() {
           molecule={drawingState.molecule}
           selectedTool={drawingState.selectedTool}
           selectedElement={drawingState.selectedElement}
-          selectedBondType={drawingState.selectedBondType}
           canvasOffset={drawingState.canvasOffset}
           scale={drawingState.scale}
           onMoleculeChange={(molecule: Molecule) => updateDrawingState({ molecule })}

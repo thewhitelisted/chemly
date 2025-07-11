@@ -24,6 +24,14 @@ const BOND_ORDER: Record<string, number> = {
   dash: 1,
 };
 
+// Ensure all elements in the toolbar are supported in valence logic
+const TOOLBAR_ELEMENTS = ['C','O','N','P','S','F','Cl','Br','I','H'];
+for (const el of TOOLBAR_ELEMENTS) {
+  if (!(el in ELEMENT_VALENCE)) {
+    throw new Error(`Element ${el} is used in the UI but not supported in valence logic. Please add it to ELEMENT_VALENCE.`);
+  }
+}
+
 export class HydrogenManager {
   /**
    * Calculate how many bonds (including hydrogens) an atom currently has

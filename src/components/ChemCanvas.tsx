@@ -5,9 +5,8 @@ import { HydrogenManager } from '../utils/hydrogenManager';
 
 interface ChemCanvasProps {
   molecule: Molecule;
-  selectedTool: 'atom' | 'bond' | 'select' | 'eraser' | 'pan';
+  selectedTool: 'atom' | 'select' | 'eraser' | 'pan';
   selectedElement: ElementSymbol;
-  selectedBondType: BondType;
   canvasOffset: Point;
   scale: number;
   onMoleculeChange: (molecule: Molecule) => void;
@@ -34,7 +33,6 @@ export function ChemCanvas({
   molecule,
   selectedTool,
   selectedElement,
-  selectedBondType,
   canvasOffset,
   scale,
   onMoleculeChange,
@@ -130,14 +128,6 @@ export function ChemCanvas({
     };
   }, [canvasOffset, scale]);
 
-  // Transform world coordinates to screen coordinates for rendering
-  const worldToScreen = useCallback((point: Point): Point => {
-    return {
-      x: point.x * scale + canvasOffset.x,
-      y: point.y * scale + canvasOffset.y,
-    };
-  }, [canvasOffset, scale]);
-
   const snapToGrid = (point: Point): Point => {
     return {
       x: Math.round(point.x / GRID_SIZE) * GRID_SIZE,
@@ -215,15 +205,57 @@ export function ChemCanvas({
     const existingAtom = findAtomAtPoint(snappedPoint);
 
     if (selectedTool === 'select') {
-      // For select tool, handle selection
+      // For select tool, handle selection and bond clicking
       if (existingAtom) {
         // Select the clicked atom
         console.log('Selecting atom:', existingAtom.id);
         setSelectedAtom(existingAtom.id);
       } else {
-        // Clear selection if clicking on empty space
-        console.log('Clearing selection');
-        setSelectedAtom(null);
+        // Check if we clicked on a bond to increase its order
+        const clickedBond = findBondAtPoint(point);
+        if (clickedBond) {
+          console.log('Clicking bond to increase order:', clickedBond.id, 'current type:', clickedBond.type);
+          
+          // Cycle through bond types: single -> double -> triple -> single
+          let newBondType: BondType;
+          switch (clickedBond.type) {
+            case 'single':
+              newBondType = 'double';
+              break;
+            case 'double':
+              newBondType = 'triple';
+              break;
+            case 'triple':
+              newBondType = 'single';
+              break;
+            case 'wedge':
+              newBondType = 'dash';
+              break;
+            case 'dash':
+              newBondType = 'single';
+              break;
+            default:
+              newBondType = 'single';
+          }
+          
+          // Update bond type
+          const updatedBonds = molecule.bonds.map(bond =>
+            bond.id === clickedBond.id
+              ? { ...bond, type: newBondType }
+              : bond
+          );
+          
+          // Create molecule with updated bond
+          const moleculeWithUpdatedBond = { ...molecule, bonds: updatedBonds };
+          
+          // Update hydrogens for both atoms affected by the bond type change
+          const finalMolecule = HydrogenManager.onBondTypeChanged(clickedBond, moleculeWithUpdatedBond);
+          onMoleculeChange(finalMolecule);
+        } else {
+          // Clear selection if clicking on empty space
+          console.log('Clearing selection');
+          setSelectedAtom(null);
+        }
       }
     } else if (selectedTool === 'atom') {
       if (existingAtom) {
@@ -257,29 +289,33 @@ export function ChemCanvas({
         }
       }
     } else if (selectedTool === 'eraser') {
-      if (existingAtom) {
-        // Remove atom and all connected bonds, including hydrogen atoms
-        const updatedMolecule = HydrogenManager.onAtomDeleted(existingAtom.id, molecule);
+      // Try to delete atom first (broaden tolerance)
+      const atomToDelete = findAtomAtPoint(point) || findAtomAtPoint(snappedPoint);
+      if (atomToDelete) {
+        let updatedMolecule = HydrogenManager.onAtomDeleted(atomToDelete.id, molecule);
+        // Extra safety: update hydrogens for all non-hydrogen atoms
+        const nonHydrogenAtoms = updatedMolecule.atoms.filter(a => a.element !== 'H');
+        const nonHydrogenIds = nonHydrogenAtoms.map(a => a.id);
+        updatedMolecule = HydrogenManager.updateHydrogensForAtoms(nonHydrogenIds, updatedMolecule);
         onMoleculeChange(updatedMolecule);
         setSelectedAtom(null);
-      } else {
-        // Check if we clicked on a bond
-        console.log('Checking for bond at point:', point);
-        const clickedBond = findBondAtPoint(point);
-        console.log('Found bond:', clickedBond);
-        
-        if (clickedBond) {
-          console.log('Deleting bond:', clickedBond.id);
-          
-          // Remove the bond
-          const updatedBonds = molecule.bonds.filter(bond => bond.id !== clickedBond.id);
-          const updatedMolecule = { ...molecule, bonds: updatedBonds };
-          
-          // Update hydrogens for both atoms affected by the bond removal
-          const finalMolecule = HydrogenManager.onBondDeleted(clickedBond, updatedMolecule);
-          onMoleculeChange(finalMolecule);
-        }
+        setDraggedAtom(null);
+        setHoveredAtom(null);
+        return;
       }
+      // Try to delete bond if no atom found
+      const bondToDelete = findBondAtPoint(point);
+      if (bondToDelete) {
+        const updatedBonds = molecule.bonds.filter(bond => bond.id !== bondToDelete.id);
+        const updatedMolecule = { ...molecule, bonds: updatedBonds };
+        const finalMolecule = HydrogenManager.onBondDeleted(bondToDelete, updatedMolecule);
+        onMoleculeChange(finalMolecule);
+        setSelectedAtom(null);
+        setDraggedAtom(null);
+        setHoveredAtom(null);
+        return;
+      }
+      // If nothing found, do nothing
     }
   }, [molecule, selectedTool, selectedElement, getCanvasPoint, onMoleculeChange, isDragging]);
 
@@ -310,10 +346,10 @@ export function ChemCanvas({
             Math.pow(selectedAtomObj.position.y - point.y, 2)
           );
           if (distance <= ATOM_RADIUS + 5) {
-            // We're clicking on the selected atom - start drag
-            console.log('Starting drag on selected atom:', selectedAtom);
+            // We're clicking on the selected atom - could be for dragging or bond creation
+            console.log('Starting potential drag/bond on selected atom:', selectedAtom);
             setDraggedAtom(selectedAtom);
-            setDragStart(point);
+            setDragStart(selectedAtomObj.position); // Use atom position for consistent bond creation
             setIsDragging(false);
             return;
           }
@@ -326,16 +362,20 @@ export function ChemCanvas({
       const foundAtom = atom || atomSnapped;
       
       if (foundAtom) {
-        console.log('Selecting and preparing drag for atom:', foundAtom.id);
+        console.log('Selecting and preparing drag/bond for atom:', foundAtom.id);
         setSelectedAtom(foundAtom.id);
         setDraggedAtom(foundAtom.id);
-        setDragStart(point);
+        setDragStart(foundAtom.position); // Use atom position for consistent bond creation
         setIsDragging(false);
       }
-    } else if (selectedTool === 'bond') {
+    } else if (selectedTool === 'atom') {
+      // For atom tool, check if we're clicking on an existing atom to start bond creation
       const foundAtom = findAtomAtPoint(point) || findAtomAtPoint(snappedPoint);
       if (foundAtom) {
+        console.log('Starting atom bond creation from:', foundAtom.id);
+        setDraggedAtom(foundAtom.id);
         setDragStart(foundAtom.position);
+        setIsDragging(false);
       }
     }
   }, [selectedTool, selectedAtom, molecule.atoms, getCanvasPoint]);
@@ -376,36 +416,59 @@ export function ChemCanvas({
     }
 
     if (selectedTool === 'select' && draggedAtom && dragStart) {
-      // Check if we've moved enough to start dragging (minimum 3 pixels)
+      // Check if we've moved enough to start dragging (minimum 8 pixels)
       const dragDistance = Math.sqrt(
         Math.pow(point.x - dragStart.x, 2) + Math.pow(point.y - dragStart.y, 2)
       );
       
-      if (dragDistance > 3 || isDragging) {
-        // Start or continue dragging
-        if (!isDragging) {
-          console.log('Starting drag for atom:', draggedAtom);
-          setIsDragging(true);
+      if (dragDistance > 8 || isDragging) {
+        // Check if we're over another atom - if so, we're creating a bond
+        const targetAtom = findAtomAtPoint(snappedPoint);
+        
+        if (targetAtom && targetAtom.id !== draggedAtom) {
+          // We're creating a bond - show preview
+          setPreviewBond({ start: dragStart, end: targetAtom.position });
+        } else {
+          // We're either moving the atom or showing bond preview to empty space
+          if (!isDragging) {
+            console.log('Starting drag for atom:', draggedAtom);
+            setIsDragging(true);
+          }
+          
+          // If there's no target atom, we could be moving the atom or creating a bond to empty space
+          // Show bond preview if we're far enough and not over the original atom
+          if (dragDistance > 20) {
+            setPreviewBond({ start: dragStart, end: snappedPoint });
+          } else {
+            // Close to original position - probably moving the atom
+            setPreviewBond(null);
+            
+            // Move the atom
+            const atomToDrag = selectedAtom || draggedAtom;
+            const updatedAtoms = molecule.atoms.map(atom =>
+              atom.id === atomToDrag
+                ? { ...atom, position: snappedPoint }
+                : atom
+            );
+            onMoleculeChange({ ...molecule, atoms: updatedAtoms });
+          }
         }
-        
-        // Use selectedAtom for dragging if we're over it, otherwise use draggedAtom
-        const atomToDrag = selectedAtom || draggedAtom;
-        
-        const updatedAtoms = molecule.atoms.map(atom =>
-          atom.id === atomToDrag
-            ? { ...atom, position: snappedPoint }
-            : atom
-        );
-        onMoleculeChange({ ...molecule, atoms: updatedAtoms });
       }
-    } else if (selectedTool === 'bond' && dragStart) {
-      // Preview bond creation
-      setPreviewBond({ start: dragStart, end: snappedPoint });
+    } else if (selectedTool === 'atom' && draggedAtom && dragStart) {
+      // For atom tool, always show preview for bond + new atom creation
+      const dragDistance = Math.sqrt(
+        Math.pow(point.x - dragStart.x, 2) + Math.pow(point.y - dragStart.y, 2)
+      );
+      
+      if (dragDistance > 8) {
+        // Show preview bond to where the new atom will be created
+        setPreviewBond({ start: dragStart, end: snappedPoint });
+      }
     }
   }, [selectedTool, draggedAtom, dragStart, isDragging, selectedAtom, isPanning, panStart, canvasOffset, scale, getCanvasPoint, molecule, onMoleculeChange, onCanvasTransformChange]);
 
   const handleMouseUp = useCallback((event: React.MouseEvent) => {
-    console.log('MouseUp:', { draggedAtom, isDragging, selectedAtom, isPanning });
+    console.log('MouseUp:', { draggedAtom, isDragging, selectedAtom, isPanning, selectedTool });
     
     if (selectedTool === 'pan' && isPanning) {
       // End panning
@@ -415,37 +478,16 @@ export function ChemCanvas({
     }
     
     if (selectedTool === 'select' && draggedAtom) {
-      // End atom dragging
-      const wasDragging = isDragging;
-      const draggedAtomId = draggedAtom; // Preserve the ID before clearing
-      
-      console.log('Ending drag for atom:', draggedAtomId, 'was dragging:', wasDragging);
-      
-      setDraggedAtom(null);
-      setDragStart(null);
-      
-      // Keep the atom selected after dragging
-      setSelectedAtom(draggedAtomId);
-      
-      // Clear isDragging state with a small delay if we were actually dragging
-      if (wasDragging) {
-        // Set flag to prevent immediate click handling, then clear it
-        setRecentDragEnd(true);
-        setTimeout(() => {
-          setIsDragging(false);
-          setRecentDragEnd(false);
-        }, 100);
-      } else {
-        setIsDragging(false);
-      }
-    } else if (selectedTool === 'bond' && dragStart) {
-      // Complete bond creation
+      // Check if we're creating a bond or just moving an atom
       const point = getCanvasPoint(event.clientX, event.clientY);
       const snappedPoint = snapToGrid(point);
-      const startAtom = findAtomAtPoint(dragStart);
+      const startAtom = molecule.atoms.find(a => a.id === draggedAtom);
       const endAtom = findAtomAtPoint(snappedPoint);
-
-      if (startAtom && endAtom && startAtom.id !== endAtom.id) {
+      
+      if (startAtom && endAtom && startAtom.id !== endAtom.id && dragStart) {
+        // We're creating a bond between two atoms
+        console.log('Creating bond between:', startAtom.id, 'and', endAtom.id);
+        
         // Check if bond already exists
         const existingBond = molecule.bonds.find(
           bond =>
@@ -454,10 +496,26 @@ export function ChemCanvas({
         );
 
         if (existingBond) {
+          // Cycle through bond types: single -> double -> triple -> single
+          let newBondType: BondType;
+          switch (existingBond.type) {
+            case 'single':
+              newBondType = 'double';
+              break;
+            case 'double':
+              newBondType = 'triple';
+              break;
+            case 'triple':
+              newBondType = 'single';
+              break;
+            default:
+              newBondType = 'single';
+          }
+          
           // Update bond type
           const updatedBonds = molecule.bonds.map(bond =>
             bond.id === existingBond.id
-              ? { ...bond, type: selectedBondType }
+              ? { ...bond, type: newBondType }
               : bond
           );
           
@@ -468,12 +526,12 @@ export function ChemCanvas({
           const finalMolecule = HydrogenManager.onBondTypeChanged(existingBond, moleculeWithUpdatedBond);
           onMoleculeChange(finalMolecule);
         } else {
-          // Create new bond
+          // Create new bond (default to single)
           const newBond: Bond = {
             id: uuidv4(),
             sourceAtomId: startAtom.id,
             targetAtomId: endAtom.id,
-            type: selectedBondType,
+            type: 'single',
           };
           
           // Add bond first
@@ -486,40 +544,118 @@ export function ChemCanvas({
           const finalMolecule = HydrogenManager.onBondCreated(newBond, moleculeWithBond);
           onMoleculeChange(finalMolecule);
         }
-      } else if (!endAtom && startAtom) {
-        // Create new atom at end point
-        const newAtom: Atom = {
-          id: uuidv4(),
-          element: selectedElement,
-          position: snappedPoint,
-        };
-        const newBond: Bond = {
-          id: uuidv4(),
-          sourceAtomId: startAtom.id,
-          targetAtomId: newAtom.id,
-          type: selectedBondType,
-        };
         
-        // Add new atom and bond
-        let moleculeWithNewAtom = {
-          atoms: [...molecule.atoms, newAtom],
-          bonds: [...molecule.bonds, newBond],
-        };
+        // Keep the source atom selected after bond creation
+        setSelectedAtom(startAtom.id);
+      } else {
+        // End atom dragging (no bond created)
+        const wasDragging = isDragging;
+        const draggedAtomId = draggedAtom; // Preserve the ID before clearing
         
-        // Add hydrogens to the new atom if it's not hydrogen
-        if (selectedElement !== 'H') {
-          moleculeWithNewAtom = HydrogenManager.onAtomCreated(newAtom, moleculeWithNewAtom);
+        console.log('Ending drag for atom:', draggedAtomId, 'was dragging:', wasDragging);
+        
+        // Keep the atom selected after dragging
+        setSelectedAtom(draggedAtomId);
+        
+        // Clear isDragging state with a small delay if we were actually dragging
+        if (wasDragging) {
+          // Set flag to prevent immediate click handling, then clear it
+          setRecentDragEnd(true);
+          setTimeout(() => {
+            setIsDragging(false);
+            setRecentDragEnd(false);
+          }, 100);
+        } else {
+          setIsDragging(false);
         }
-        
-        // Update hydrogens for the source atom
-        const finalMolecule = HydrogenManager.onBondCreated(newBond, moleculeWithNewAtom);
-        onMoleculeChange(finalMolecule);
       }
+      
+      // Always clear these states
+      setDraggedAtom(null);
+      setDragStart(null);
+      setPreviewBond(null);
+    } else if (selectedTool === 'atom' && draggedAtom && dragStart) {
+      // Create new atom with bond from the dragged atom
+      const point = getCanvasPoint(event.clientX, event.clientY);
+      const snappedPoint = snapToGrid(point);
+      const startAtom = molecule.atoms.find(a => a.id === draggedAtom);
+      
+      // Check if we dragged far enough to create a new atom
+      const dragDistance = Math.sqrt(
+        Math.pow(point.x - dragStart.x, 2) + Math.pow(point.y - dragStart.y, 2)
+      );
+      
+      if (startAtom && dragDistance > 8) {
+        // Check if there's already an atom at the target position
+        const existingAtom = findAtomAtPoint(snappedPoint);
+        
+        if (existingAtom && existingAtom.id !== startAtom.id) {
+          // Connect to existing atom instead of creating new one
+          const existingBond = molecule.bonds.find(
+            bond =>
+              (bond.sourceAtomId === startAtom.id && bond.targetAtomId === existingAtom.id) ||
+              (bond.sourceAtomId === existingAtom.id && bond.targetAtomId === startAtom.id)
+          );
 
+          if (!existingBond) {
+            // Create new bond to existing atom
+            const newBond: Bond = {
+              id: uuidv4(),
+              sourceAtomId: startAtom.id,
+              targetAtomId: existingAtom.id,
+              type: 'single',
+            };
+            
+            const moleculeWithBond = {
+              ...molecule,
+              bonds: [...molecule.bonds, newBond],
+            };
+            
+            const finalMolecule = HydrogenManager.onBondCreated(newBond, moleculeWithBond);
+            onMoleculeChange(finalMolecule);
+          }
+        } else {
+          // Create new atom at the drop position
+          const newAtom: Atom = {
+            id: uuidv4(),
+            element: selectedElement,
+            position: snappedPoint,
+          };
+          
+          // Create bond between start atom and new atom
+          const newBond: Bond = {
+            id: uuidv4(),
+            sourceAtomId: startAtom.id,
+            targetAtomId: newAtom.id,
+            type: 'single',
+          };
+          
+          // Add both atom and bond
+          const moleculeWithAtomAndBond = {
+            ...molecule,
+            atoms: [...molecule.atoms, newAtom],
+            bonds: [...molecule.bonds, newBond],
+          };
+          
+          // Update hydrogens for both atoms
+          let finalMolecule = HydrogenManager.onBondCreated(newBond, moleculeWithAtomAndBond);
+          
+          // Also add hydrogens to the new atom if it's not hydrogen
+          if (selectedElement !== 'H') {
+            finalMolecule = HydrogenManager.onAtomCreated(newAtom, finalMolecule);
+          }
+          
+          console.log('Created new atom with bond:', { newAtom: newAtom.id, startAtom: startAtom.id });
+          onMoleculeChange(finalMolecule);
+        }
+      }
+      
+      // Clear atom tool drag states
+      setDraggedAtom(null);
       setDragStart(null);
       setPreviewBond(null);
     }
-  }, [selectedTool, draggedAtom, isDragging, dragStart, isPanning, molecule, selectedBondType, selectedElement, getCanvasPoint, onMoleculeChange]);
+  }, [selectedTool, draggedAtom, isDragging, dragStart, isPanning, molecule, selectedElement, getCanvasPoint, onMoleculeChange]);
 
   // Handle wheel zoom
   const handleWheel = useCallback((event: React.WheelEvent) => {
@@ -752,7 +888,6 @@ export function ChemCanvas({
         className="w-full h-full"
         style={{ 
           cursor: selectedTool === 'atom' ? (hoveredAtom ? 'pointer' : 'default') : 
-                  selectedTool === 'bond' ? 'default' : 
                   selectedTool === 'select' ? (hoveredAtom ? 'move' : 'default') :
                   selectedTool === 'eraser' ? 'pointer' :
                   selectedTool === 'pan' ? (isPanning ? 'grabbing' : 'grab') : 'default',

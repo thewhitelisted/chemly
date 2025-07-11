@@ -16,17 +16,15 @@ export type Molecule = MoleculeGraph;
 
 export interface DrawingState {
   molecule: Molecule;
-  selectedTool: 'atom' | 'bond' | 'select' | 'eraser' | 'pan';
+  selectedTool: 'atom' | 'select' | 'eraser' | 'pan';
   selectedElement: ElementSymbol;
-  selectedBondType: BondType;
   canvasOffset: Point;
   scale: number;
 }
 
 export interface ToolbarState {
   activeElement: ElementSymbol;
-  activeBondType: BondType;
-  activeTool: 'atom' | 'bond' | 'select' | 'eraser' | 'pan';
+  activeTool: 'atom' | 'select' | 'eraser' | 'pan';
 }
 
 // Legacy types for backward compatibility

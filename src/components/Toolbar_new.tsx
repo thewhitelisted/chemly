@@ -18,6 +18,7 @@ const elements: { symbol: ElementSymbol; name: string; color: string }[] = [
   { symbol: 'Cl', name: 'Chlorine', color: 'bg-green-600' },
   { symbol: 'Br', name: 'Bromine', color: 'bg-red-800' },
   { symbol: 'I', name: 'Iodine', color: 'bg-purple-800' },
+  { symbol: 'H', name: 'Hydrogen', color: 'bg-gray-300' },
 ];
 
 export function Toolbar({
@@ -29,9 +30,7 @@ export function Toolbar({
   return (
     <div className="w-16 bg-white border-r border-gray-200 flex flex-col items-center py-4 shadow-sm">
       {/* Tool Selection */}
-      <div className="flex flex-col gap-1 mb-6 items-center self-center w-full">
-        <div className="text-base text-gray-900 mb-2 font-semibold text-center">Tools</div>
-        <div className="flex flex-col gap-2 w-full items-center">
+      <div className="flex flex-col gap-2 mb-6">
         <button
           onClick={() => onToolSelect('select')}
           className={`p-3 rounded-lg transition-colors ${
@@ -67,30 +66,45 @@ export function Toolbar({
         >
           <Eraser size={20} />
         </button>
-        </div>
       </div>
 
       {/* Element Picker */}
-      <div className="flex flex-col gap-1 mb-6 items-center self-center w-full">
-        <div className="text-base text-gray-900 mb-2 font-semibold text-center">Atoms</div>
-        <div className="flex flex-col items-center gap-1 w-full">
-          {elements.map((element) => (
-            <button
-              key={element.symbol}
-              onClick={() => onElementSelect(element.symbol)}
-              className={`w-10 h-10 mx-auto rounded-lg flex items-center justify-center text-white text-sm font-bold transition-all text-center ${
-                selectedElement === element.symbol && selectedTool === 'atom'
-                  ? 'ring-2 ring-blue-400 ring-offset-1'
-                  : ''
-              } ${element.color} hover:scale-105`}
-              title={element.name}
-            >
-              <span className="flex items-center justify-center w-full h-full text-center">{element.symbol}</span>
-            </button>
-          ))}
-        </div>
+      <div className="flex flex-col gap-1 mb-6">
+        <div className="text-xs text-gray-500 mb-2 text-center">Elements</div>
+        {elements.slice(0, 6).map((element) => (
+          <button
+            key={element.symbol}
+            onClick={() => onElementSelect(element.symbol)}
+            className={`w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-bold transition-all ${
+              selectedElement === element.symbol && selectedTool === 'atom'
+                ? 'ring-2 ring-blue-400 ring-offset-1'
+                : ''
+            } ${element.color} hover:scale-105`}
+            title={element.name}
+          >
+            {element.symbol}
+          </button>
+        ))}
       </div>
-      
+
+      {/* More Elements (scrollable) */}
+      <div className="flex flex-col gap-1 max-h-32 overflow-y-auto">
+        <div className="text-xs text-gray-500 mb-2 text-center">More</div>
+        {elements.slice(6).map((element) => (
+          <button
+            key={element.symbol}
+            onClick={() => onElementSelect(element.symbol)}
+            className={`w-10 h-10 rounded-lg flex items-center justify-center text-white text-xs font-bold transition-all ${
+              selectedElement === element.symbol && selectedTool === 'atom'
+                ? 'ring-2 ring-blue-400 ring-offset-1'
+                : ''
+            } ${element.color} hover:scale-105`}
+            title={element.name}
+          >
+            {element.symbol}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
