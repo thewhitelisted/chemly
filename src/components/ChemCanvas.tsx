@@ -259,13 +259,11 @@ export function ChemCanvas({
       }
     } else if (selectedTool === 'atom') {
       if (existingAtom) {
-        // Replace existing atom with new element
-        const updatedAtoms = molecule.atoms.map(atom =>
-          atom.id === existingAtom.id
-            ? { ...atom, element: selectedElement }
-            : atom
-        );
-        onMoleculeChange({ ...molecule, atoms: updatedAtoms });
+        // Only replace element if clicking (not dragging) and not connecting two atoms
+        // If dragging from one atom to another, do NOT change the element
+        // This logic is now handled in mouse up (bond creation)
+        // Do nothing here
+        return;
       } else {
         // Add new atom
         const newAtom: Atom = {
@@ -588,7 +586,6 @@ export function ChemCanvas({
       if (startAtom && dragDistance > 8) {
         // Check if there's already an atom at the target position
         const existingAtom = findAtomAtPoint(snappedPoint);
-        
         if (existingAtom && existingAtom.id !== startAtom.id) {
           // Connect to existing atom instead of creating new one
           const existingBond = molecule.bonds.find(
@@ -596,7 +593,6 @@ export function ChemCanvas({
               (bond.sourceAtomId === startAtom.id && bond.targetAtomId === existingAtom.id) ||
               (bond.sourceAtomId === existingAtom.id && bond.targetAtomId === startAtom.id)
           );
-
           if (!existingBond) {
             // Create new bond to existing atom
             const newBond: Bond = {
@@ -605,12 +601,10 @@ export function ChemCanvas({
               targetAtomId: existingAtom.id,
               type: 'single',
             };
-            
             const moleculeWithBond = {
               ...molecule,
               bonds: [...molecule.bonds, newBond],
             };
-            
             const finalMolecule = HydrogenManager.onBondCreated(newBond, moleculeWithBond);
             onMoleculeChange(finalMolecule);
           }
@@ -621,7 +615,6 @@ export function ChemCanvas({
             element: selectedElement,
             position: snappedPoint,
           };
-          
           // Create bond between start atom and new atom
           const newBond: Bond = {
             id: uuidv4(),
@@ -629,22 +622,18 @@ export function ChemCanvas({
             targetAtomId: newAtom.id,
             type: 'single',
           };
-          
           // Add both atom and bond
           const moleculeWithAtomAndBond = {
             ...molecule,
             atoms: [...molecule.atoms, newAtom],
             bonds: [...molecule.bonds, newBond],
           };
-          
           // Update hydrogens for both atoms
           let finalMolecule = HydrogenManager.onBondCreated(newBond, moleculeWithAtomAndBond);
-          
           // Also add hydrogens to the new atom if it's not hydrogen
           if (selectedElement !== 'H') {
             finalMolecule = HydrogenManager.onAtomCreated(newAtom, finalMolecule);
           }
-          
           console.log('Created new atom with bond:', { newAtom: newAtom.id, startAtom: startAtom.id });
           onMoleculeChange(finalMolecule);
         }
