@@ -54,6 +54,13 @@ export function ChemCanvas({
   // Track if we're currently updating hydrogens to prevent infinite loops
   const isUpdatingHydrogens = useRef(false);
 
+  // Reset hover state when tool changes to ensure cursor updates immediately
+  useEffect(() => {
+    setHoveredAtom(null);
+    setIsPanning(false);
+    setPanStart(null);
+  }, [selectedTool]);
+
   // Auto-fill hydrogens for atoms that need them when molecule changes (e.g., from SMILES import)
   useEffect(() => {
     // Prevent infinite loops - if we're already updating hydrogens, skip this run
@@ -744,12 +751,13 @@ export function ChemCanvas({
         ref={svgRef}
         className="w-full h-full"
         style={{ 
-          cursor: selectedTool === 'atom' ? 'crosshair' : 
-                  selectedTool === 'bond' ? 'crosshair' : 
+          cursor: selectedTool === 'atom' ? (hoveredAtom ? 'pointer' : 'default') : 
+                  selectedTool === 'bond' ? 'default' : 
                   selectedTool === 'select' ? (hoveredAtom ? 'move' : 'default') :
                   selectedTool === 'eraser' ? 'pointer' :
-                  selectedTool === 'pan' ? (isPanning ? 'move' : 'all-scroll') : 'default',
-          userSelect: 'none'
+                  selectedTool === 'pan' ? (isPanning ? 'grabbing' : 'grab') : 'default',
+          userSelect: 'none',
+          transition: 'none'
         }}
         onClick={handleCanvasClick}
         onMouseDown={handleMouseDown}
