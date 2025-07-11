@@ -15,7 +15,7 @@ interface ChemCanvasProps {
 }
 
 const ATOM_RADIUS = 15;
-const GRID_SIZE = 20;
+const GRID_SIZE = 40;
 
 const elementColors: Record<ElementSymbol, string> = {
   C: '#1f2937', // gray-800
@@ -742,23 +742,23 @@ export function ChemCanvas({
             <path
               d={`M ${GRID_SIZE} 0 L 0 0 0 ${GRID_SIZE}`}
               fill="none"
-              stroke="#f3f4f6"
-              strokeWidth="1"
+              stroke="#d1d5db"
+              strokeWidth="2"
             />
           </pattern>
         </defs>
-        
-        {/* Background grid that extends infinitely */}
-        <rect 
-          x={-canvasOffset.x / scale - 10000} 
-          y={-canvasOffset.y / scale - 10000} 
-          width={20000} 
-          height={20000} 
-          fill="url(#grid)" 
-        />
 
         {/* Main content group with transform */}
         <g transform={`translate(${canvasOffset.x}, ${canvasOffset.y}) scale(${scale})`}>
+          {/* Background grid that moves with content */}
+          <rect 
+            x={-10000} 
+            y={-10000} 
+            width={20000} 
+            height={20000} 
+            fill="url(#grid)" 
+          />
+
           {/* Render bonds first */}
           {molecule.bonds.map(renderBond)}
 
