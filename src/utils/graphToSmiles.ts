@@ -50,20 +50,77 @@ function generateProperSmiles(graph: MoleculeGraph): string {
     return '[H]'; // Only hydrogen atoms
   }
   
-  // Handle single non-hydrogen atom case
-  if (nonHydrogenAtoms.length === 1) {
-    const atom = nonHydrogenAtoms[0];
+  // Find disconnected components (fragments)
+  const components = findConnectedComponents(graph, nonHydrogenAtoms);
+  console.log(`Found ${components.length} disconnected components`);
+  
+  if (components.length === 1) {
+    // Single connected component - no dots needed
+    return generateComponentSmiles(components[0], graph);
+  } else {
+    // Multiple disconnected components - join with dots
+    const componentSmiles = components.map(component => 
+      generateComponentSmiles(component, graph)
+    );
+    return componentSmiles.join('.');
+  }
+}
+
+// Find all connected components (disconnected fragments) in the molecule
+function findConnectedComponents(graph: MoleculeGraph, nonHydrogenAtoms: any[]): any[][] {
+  const visited = new Set<string>();
+  const components: any[][] = [];
+  
+  // Build adjacency list for non-hydrogen atoms only
+  const adjacencyList = buildNonHydrogenAdjacencyList(graph);
+  
+  for (const atom of nonHydrogenAtoms) {
+    if (!visited.has(atom.id)) {
+      const component: any[] = [];
+      
+      // DFS to find all atoms in this connected component
+      const stack = [atom];
+      while (stack.length > 0) {
+        const currentAtom = stack.pop()!;
+        if (visited.has(currentAtom.id)) continue;
+        
+        visited.add(currentAtom.id);
+        component.push(currentAtom);
+        
+        // Add all unvisited neighbors to the stack
+        const neighbors = adjacencyList.get(currentAtom.id) || [];
+        neighbors.forEach(neighbor => {
+          if (!visited.has(neighbor.atom.id)) {
+            stack.push(neighbor.atom);
+          }
+        });
+      }
+      
+      components.push(component);
+    }
+  }
+  
+  return components;
+}
+
+// Generate SMILES for a single connected component
+function generateComponentSmiles(atoms: any[], graph: MoleculeGraph): string {
+  if (atoms.length === 0) return '';
+  
+  // Handle single atom case
+  if (atoms.length === 1) {
+    const atom = atoms[0];
     return formatAtomSmiles(atom, graph);
   }
   
-  // Create adjacency list for non-hydrogen atoms only
+  // Create adjacency list for this component
   const adjacencyList = buildNonHydrogenAdjacencyList(graph);
   const visited = new Set<string>();
   const ringClosures = new Map<string, number>();
   let ringCounter = 1;
   
   // Find starting atom (prefer atoms with only one bond, then any atom)
-  const startAtom = findStartingAtom(nonHydrogenAtoms, adjacencyList);
+  const startAtom = findStartingAtom(atoms, adjacencyList);
   
   // Perform depth-first traversal to generate SMILES
   const result = traverseForSmiles(

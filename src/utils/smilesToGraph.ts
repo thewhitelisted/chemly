@@ -22,7 +22,8 @@ export async function importFromSmiles(smiles: string): Promise<SmilesImportResu
     }
 
     // Parse SMILES structure (atoms and bonds only)
-    let graph = parseBasicSmiles(smiles.trim());
+    // Handle disconnected fragments separated by dots
+    let graph = parseSmiles(smiles.trim());
     
     // Add hydrogens to complete all valences
     graph = HydrogenManager.fillAllValences(graph);
@@ -47,6 +48,55 @@ export async function importFromSmiles(smiles: string): Promise<SmilesImportResu
       error: error instanceof Error ? error.message : 'Unknown error occurred'
     };
   }
+}
+
+// Main SMILES parser that handles disconnected fragments
+function parseSmiles(smiles: string): MoleculeGraph {
+  console.log('parseSmiles called with:', smiles);
+  
+  // Split by dots to handle disconnected fragments
+  const fragments = smiles.split('.');
+  console.log('Found fragments:', fragments);
+  
+  let allAtoms: any[] = [];
+  let allBonds: any[] = [];
+  let currentX = 50; // Start position for the first fragment
+  const fragmentSpacing = 200; // Space between disconnected fragments
+  
+  for (let i = 0; i < fragments.length; i++) {
+    const fragment = fragments[i].trim();
+    if (!fragment) continue;
+    
+    console.log(`Processing fragment ${i + 1}: "${fragment}"`);
+    
+    // Parse each fragment independently
+    const fragmentGraph = parseBasicSmiles(fragment);
+    
+    // Offset atom positions for this fragment
+    const offsetAtoms = fragmentGraph.atoms.map(atom => ({
+      ...atom,
+      position: {
+        x: atom.position.x + currentX,
+        y: atom.position.y
+      }
+    }));
+    
+    // Add fragment atoms and bonds to the main graph
+    allAtoms = [...allAtoms, ...offsetAtoms];
+    allBonds = [...allBonds, ...fragmentGraph.bonds];
+    
+    // Update position for next fragment
+    currentX += fragmentSpacing;
+    
+    console.log(`Fragment ${i + 1} result: ${offsetAtoms.length} atoms, ${fragmentGraph.bonds.length} bonds`);
+  }
+  
+  console.log(`Total parsed: ${allAtoms.length} atoms, ${allBonds.length} bonds from ${fragments.length} fragments`);
+  
+  return {
+    atoms: allAtoms,
+    bonds: allBonds
+  };
 }
 
 // Enhanced SMILES parser for common chemical structures
@@ -78,6 +128,12 @@ function parseBasicSmiles(smiles: string): MoleculeGraph {
     'C#C': () => createEthyne(),
     'CO': () => createMethanol(),
     'CC(C)C': () => createIsobutane(),
+    
+    // Common disconnected fragments
+    'C.C': () => createTwoMethanes(),
+    'CC.CC': () => createTwoEthanes(),
+    'O.CC(=O)O': () => createWaterAceticAcid(),
+    'C.O': () => createMethaneWater(),
     
     // Ring structures
     'c1ccccc1': () => createBenzeneRing(),
@@ -510,6 +566,73 @@ function createAmmonia(): MoleculeGraph {
   return {
     atoms: [nitrogen],
     bonds: []
+  };
+}
+
+function createTwoMethanes(): MoleculeGraph {
+  const carbon1 = { id: uuidv4(), element: 'C', position: { x: 100, y: 100 } };
+  const carbon2 = { id: uuidv4(), element: 'C', position: { x: 300, y: 100 } };
+  
+  return {
+    atoms: [carbon1, carbon2],
+    bonds: []
+  };
+}
+
+function createTwoEthanes(): MoleculeGraph {
+  // First ethane molecule
+  const carbon1 = { id: uuidv4(), element: 'C', position: { x: 50, y: 100 } };
+  const carbon2 = { id: uuidv4(), element: 'C', position: { x: 150, y: 100 } };
+  
+  // Second ethane molecule
+  const carbon3 = { id: uuidv4(), element: 'C', position: { x: 300, y: 100 } };
+  const carbon4 = { id: uuidv4(), element: 'C', position: { x: 400, y: 100 } };
+  
+  const bonds = [
+    { id: uuidv4(), sourceAtomId: carbon1.id, targetAtomId: carbon2.id, type: 'single' as const },
+    { id: uuidv4(), sourceAtomId: carbon3.id, targetAtomId: carbon4.id, type: 'single' as const }
+  ];
+  
+  return {
+    atoms: [carbon1, carbon2, carbon3, carbon4],
+    bonds: bonds
+  };
+}
+
+function createMethaneWater(): MoleculeGraph {
+  // Methane molecule
+  const carbon = { id: uuidv4(), element: 'C', position: { x: 100, y: 100 } };
+  
+  // Water molecule
+  const oxygen = { id: uuidv4(), element: 'O', position: { x: 300, y: 100 } };
+  
+  return {
+    atoms: [carbon, oxygen],
+    bonds: []
+  };
+}
+
+function createWaterAceticAcid(): MoleculeGraph {
+  // Water molecule
+  const oxygen1 = { id: uuidv4(), element: 'O', position: { x: 100, y: 100 } };
+  
+  // Acetic acid molecule (CH3COOH)
+  const carbon1 = { id: uuidv4(), element: 'C', position: { x: 300, y: 100 } };
+  const carbon2 = { id: uuidv4(), element: 'C', position: { x: 400, y: 100 } };
+  const oxygen2 = { id: uuidv4(), element: 'O', position: { x: 450, y: 70 } };
+  const oxygen3 = { id: uuidv4(), element: 'O', position: { x: 450, y: 130 } };
+  const hydrogen = { id: uuidv4(), element: 'H', position: { x: 480, y: 130 } };
+  
+  const bonds = [
+    { id: uuidv4(), sourceAtomId: carbon1.id, targetAtomId: carbon2.id, type: 'single' as const },
+    { id: uuidv4(), sourceAtomId: carbon2.id, targetAtomId: oxygen2.id, type: 'double' as const },
+    { id: uuidv4(), sourceAtomId: carbon2.id, targetAtomId: oxygen3.id, type: 'single' as const },
+    { id: uuidv4(), sourceAtomId: oxygen3.id, targetAtomId: hydrogen.id, type: 'single' as const }
+  ];
+  
+  return {
+    atoms: [oxygen1, carbon1, carbon2, oxygen2, oxygen3, hydrogen],
+    bonds: bonds
   };
 }
 
