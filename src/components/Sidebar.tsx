@@ -1,26 +1,54 @@
-import { useState } from 'react';
-import { Copy, Download, FileText } from 'lucide-react';
-import type { Molecule } from '../types/chemistry';
+import { useState, useEffect } from 'react';
+import { Copy, Download, FileText, AlertTriangle, Lightbulb, Upload } from 'lucide-react';
+import type { Molecule, ValidationWarning } from '../types/chemistry';
+import { exportToSmiles } from '../utils/graphToSmiles';
+import { importFromSmiles } from '../utils/smilesToGraph';
+import { validateStructure } from '../utils/validateStructure';
 
 interface SidebarProps {
   molecule: Molecule;
   onMoleculeChange: (molecule: Molecule) => void;
 }
 
-// Simple SMILES generation (very basic implementation)
-const generateSMILES = (molecule: Molecule): string => {
-  if (molecule.atoms.length === 0) return '';
-  
-  // Very simplified SMILES generation for demo purposes
-  const atomSymbols = molecule.atoms.map(atom => atom.element).join('');
-  return atomSymbols || 'C'; // Default to carbon if empty
-};
-
 export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
   const [smilesInput, setSmilesInput] = useState('');
+  const [currentSmiles, setCurrentSmiles] = useState('');
+  const [promptInput, setPromptInput] = useState('');
   const [copied, setCopied] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [validation, setValidation] = useState<{ isValid: boolean; warnings: ValidationWarning[] }>({ 
+    isValid: true, 
+    warnings: [] 
+  });
 
-  const currentSmiles = generateSMILES(molecule);
+  // Update SMILES when molecule changes
+  useEffect(() => {
+    const updateSmiles = async () => {
+      setIsExporting(true);
+      try {
+        const result = await exportToSmiles(molecule);
+        if (result.success && result.smiles) {
+          setCurrentSmiles(result.smiles);
+        } else {
+          setCurrentSmiles('');
+        }
+      } catch (error) {
+        console.error('Failed to generate SMILES:', error);
+        setCurrentSmiles('');
+      } finally {
+        setIsExporting(false);
+      }
+    };
+
+    updateSmiles();
+  }, [molecule]);
+
+  // Update validation when molecule changes
+  useEffect(() => {
+    const newValidation = validateStructure(molecule);
+    setValidation(newValidation);
+  }, [molecule]);
 
   const handleCopySmiles = async () => {
     try {
@@ -32,156 +60,191 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
     }
   };
 
-  const handleSmilesInput = () => {
-    // Very basic SMILES parsing for demo - just create atoms for each character
-    if (smilesInput.trim()) {
-      const atoms = smilesInput
-        .split('')
-        .filter(char => /[A-Z]/.test(char))
-        .map((char, index) => ({
-          id: `atom-${index}`,
-          element: char as any, // Simplified for demo
-          position: { x: 100 + index * 60, y: 200 },
-        }));
-
-      onMoleculeChange({
-        atoms,
-        bonds: [], // Simplified - no bond parsing for now
-      });
-      setSmilesInput('');
+  const handleSmilesImport = async () => {
+    if (!smilesInput.trim()) return;
+    
+    setIsImporting(true);
+    try {
+      const result = await importFromSmiles(smilesInput.trim());
+      if (result.success && result.graph) {
+        onMoleculeChange(result.graph);
+        setSmilesInput(''); // Clear input after successful import
+      } else {
+        alert(`Failed to import SMILES: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Failed to import SMILES:', error);
+      alert('Failed to import SMILES structure');
+    } finally {
+      setIsImporting(false);
     }
   };
 
-  const atomCount = molecule.atoms.length;
-  const bondCount = molecule.bonds.length;
+  const handlePromptSubmit = () => {
+    if (!promptInput.trim()) return;
+    
+    // Placeholder for AI prompt handling
+    console.log('AI Prompt:', promptInput);
+    alert(`AI prompt received: "${promptInput}"\n\nThis feature will be implemented in the next phase.`);
+    setPromptInput('');
+  };
+
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case 'error': return 'text-red-600 bg-red-50 border-red-200';
+      case 'warning': return 'text-yellow-600 bg-yellow-50 border-yellow-200';
+      case 'info': return 'text-blue-600 bg-blue-50 border-blue-200';
+      default: return 'text-gray-600 bg-gray-50 border-gray-200';
+    }
+  };
+
+  const getSeverityIcon = (severity: string) => {
+    switch (severity) {
+      case 'error': return <AlertTriangle className="w-4 h-4" />;
+      case 'warning': return <AlertTriangle className="w-4 h-4" />;
+      case 'info': return <FileText className="w-4 h-4" />;
+      default: return <FileText className="w-4 h-4" />;
+    }
+  };
 
   return (
-    <div className="w-80 bg-white border-l border-gray-200 flex flex-col">
-      {/* Header */}
-      <div className="p-4 border-b border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-900">Structure Info</h2>
-      </div>
-
-      {/* Molecule Statistics */}
-      <div className="p-4 border-b border-gray-200">
+    <div className="w-80 bg-white border-l border-gray-200 p-4 flex flex-col space-y-6 overflow-y-auto">
+      {/* AI Prompt Box */}
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+          <Lightbulb className="w-4 h-4" />
+          AI Structure Generation
+        </h3>
         <div className="space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Atoms:</span>
-            <span className="font-medium">{atomCount}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Bonds:</span>
-            <span className="font-medium">{bondCount}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* SMILES Export */}
-      <div className="p-4 border-b border-gray-200">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Current SMILES
-        </label>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={currentSmiles}
-            readOnly
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-sm font-mono"
-            placeholder="No structure drawn"
+          <textarea
+            value={promptInput}
+            onChange={(e) => setPromptInput(e.target.value)}
+            placeholder="Describe the molecule you want to draw..."
+            className="w-full p-3 text-sm border border-gray-300 rounded-md resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            rows={3}
           />
           <button
-            onClick={handleCopySmiles}
-            disabled={!currentSmiles}
-            className="px-3 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-            title="Copy SMILES"
+            onClick={handlePromptSubmit}
+            disabled={!promptInput.trim()}
+            className="w-full px-3 py-2 text-sm font-medium text-white bg-purple-600 rounded-md hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
-            {copied ? '✓' : <Copy size={16} />}
+            Generate Structure
           </button>
         </div>
       </div>
 
       {/* SMILES Import */}
-      <div className="p-4 border-b border-gray-200">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Import from SMILES
-        </label>
-        <div className="flex gap-2">
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+          <Upload className="w-4 h-4" />
+          Import SMILES
+        </h3>
+        <div className="space-y-2">
           <input
             type="text"
             value={smilesInput}
             onChange={(e) => setSmilesInput(e.target.value)}
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             placeholder="Enter SMILES string..."
-            onKeyPress={(e) => e.key === 'Enter' && handleSmilesInput()}
+            className="w-full p-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            onKeyPress={(e) => e.key === 'Enter' && handleSmilesImport()}
           />
           <button
-            onClick={handleSmilesInput}
-            disabled={!smilesInput.trim()}
-            className="px-3 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-            title="Import Structure"
+            onClick={handleSmilesImport}
+            disabled={!smilesInput.trim() || isImporting}
+            className="w-full px-3 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
-            <FileText size={16} />
+            {isImporting ? 'Importing...' : 'Import Structure'}
           </button>
         </div>
-        <p className="text-xs text-gray-500 mt-1">
-          Basic SMILES parsing (demo)
-        </p>
+      </div>
+
+      {/* SMILES Export */}
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+          <Download className="w-4 h-4" />
+          Export SMILES
+        </h3>
+        <div className="space-y-2">
+          <div className="p-3 bg-gray-50 border border-gray-200 rounded-md">
+            <code className="text-sm text-gray-700 font-mono break-all">
+              {isExporting ? 'Generating...' : currentSmiles || 'No structure'}
+            </code>
+          </div>
+          <button
+            onClick={handleCopySmiles}
+            disabled={!currentSmiles || isExporting}
+            className="w-full px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            <Copy className="w-4 h-4" />
+            {copied ? 'Copied!' : 'Copy SMILES'}
+          </button>
+        </div>
       </div>
 
       {/* Structure Validation */}
-      <div className="p-4 border-b border-gray-200">
-        <h3 className="text-sm font-medium text-gray-700 mb-2">Validation</h3>
-        <div className="space-y-1">
-          {atomCount === 0 && (
-            <div className="text-xs text-gray-500">No structure to validate</div>
-          )}
-          {atomCount > 0 && (
-            <div className="text-xs text-green-600">✓ Structure contains atoms</div>
-          )}
-          {bondCount > 0 && (
-            <div className="text-xs text-green-600">✓ Bonds present</div>
-          )}
-          {atomCount > 0 && bondCount === 0 && (
-            <div className="text-xs text-yellow-600">⚠ Isolated atoms detected</div>
-          )}
-        </div>
-      </div>
-
-      {/* AI Assistant Placeholder */}
-      <div className="p-4 border-b border-gray-200">
-        <h3 className="text-sm font-medium text-gray-700 mb-2">AI Assistant</h3>
-        <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-3">
-          <div className="text-xs text-purple-700 mb-2">✨ Coming Soon</div>
-          <div className="text-xs text-gray-600">
-            • Text to structure generation
-            <br />
-            • Auto-complete suggestions
-            <br />
-            • Reaction prediction
-          </div>
-        </div>
-      </div>
-
-      {/* Export Options */}
-      <div className="p-4 mt-auto">
-        <h3 className="text-sm font-medium text-gray-700 mb-2">Export</h3>
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4" />
+          Structure Validation
+        </h3>
         <div className="space-y-2">
-          <button
-            disabled
-            className="w-full px-3 py-2 text-sm bg-gray-100 text-gray-400 rounded-md cursor-not-allowed"
-            title="Coming Soon"
-          >
-            <Download size={16} className="inline mr-2" />
-            Export as PNG
-          </button>
-          <button
-            disabled
-            className="w-full px-3 py-2 text-sm bg-gray-100 text-gray-400 rounded-md cursor-not-allowed"
-            title="Coming Soon"
-          >
-            <Download size={16} className="inline mr-2" />
-            Export as SVG
-          </button>
+          <div className={`p-2 rounded-md text-sm ${
+            validation.isValid 
+              ? 'text-green-700 bg-green-50 border border-green-200'
+              : 'text-orange-700 bg-orange-50 border border-orange-200'
+          }`}>
+            {validation.isValid ? '✓ Structure is valid' : `⚠ ${validation.warnings.length} issue(s) found`}
+          </div>
+          
+          {validation.warnings.length > 0 && (
+            <div className="space-y-1 max-h-40 overflow-y-auto">
+              {validation.warnings.map((warning) => (
+                <div
+                  key={warning.id}
+                  className={`p-2 border rounded-md text-xs ${getSeverityColor(warning.severity)}`}
+                >
+                  <div className="flex items-start gap-2">
+                    {getSeverityIcon(warning.severity)}
+                    <div>
+                      <div className="font-medium capitalize">{warning.type}</div>
+                      <div>{warning.message}</div>
+                      {warning.atomIds.length > 0 && (
+                        <div className="text-xs opacity-70 mt-1">
+                          Atoms: {warning.atomIds.join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Molecule Statistics */}
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+          <FileText className="w-4 h-4" />
+          Molecule Info
+        </h3>
+        <div className="p-3 bg-gray-50 border border-gray-200 rounded-md space-y-1 text-sm">
+          <div className="flex justify-between">
+            <span className="text-gray-600">Atoms:</span>
+            <span className="font-medium">{molecule.atoms.length}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-600">Bonds:</span>
+            <span className="font-medium">{molecule.bonds.length}</span>
+          </div>
+          {molecule.atoms.length > 0 && (
+            <div className="flex justify-between">
+              <span className="text-gray-600">Elements:</span>
+              <span className="font-medium">
+                {Array.from(new Set(molecule.atoms.map(a => a.element))).join(', ')}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>

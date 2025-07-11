@@ -1,6 +1,7 @@
-import { useRef, useCallback, useState } from 'react';
+import { useRef, useCallback, useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import type { Molecule, Atom, Bond, Point, ElementSymbol, BondType } from '../types/chemistry';
+import { HydrogenManager } from '../utils/hydrogenManager';
 
 interface ChemCanvasProps {
   molecule: Molecule;
@@ -41,6 +42,64 @@ export function ChemCanvas({
   const [hoveredAtom, setHoveredAtom] = useState<string | null>(null);
   const [selectedAtom, setSelectedAtom] = useState<string | null>(null);
   const [recentDragEnd, setRecentDragEnd] = useState(false);
+  
+  // Track if we're currently updating hydrogens to prevent infinite loops
+  const isUpdatingHydrogens = useRef(false);
+
+  // Auto-fill hydrogens for atoms that need them when molecule changes (e.g., from SMILES import)
+  useEffect(() => {
+    // Prevent infinite loops - if we're already updating hydrogens, skip this run
+    if (isUpdatingHydrogens.current) {
+      console.log('Skipping hydrogen auto-fill - already updating');
+      return;
+    }
+    
+    console.log('=== HYDROGEN AUTO-FILL CHECK ===');
+    
+    // Only run if we have non-hydrogen atoms but the molecule doesn't look "complete"
+    const nonHydrogenAtoms = molecule.atoms.filter(atom => atom.element !== 'H');
+    const hydrogenAtoms = molecule.atoms.filter(atom => atom.element === 'H');
+    
+    console.log('Non-hydrogen atoms to check:', nonHydrogenAtoms.map(a => `${a.element}(${a.id.slice(0,8)})`));
+    console.log('Current hydrogen atoms:', hydrogenAtoms.length);
+    
+    // Skip if no non-hydrogen atoms
+    if (nonHydrogenAtoms.length === 0) {
+      console.log('No non-hydrogen atoms, skipping auto-fill');
+      console.log('=== END HYDROGEN AUTO-FILL ===');
+      return;
+    }
+    
+    // Set flag to prevent recursion
+    isUpdatingHydrogens.current = true;
+    
+    // Use HydrogenManager to fill all valences
+    const updatedMolecule = HydrogenManager.fillAllValences(molecule);
+    
+    // Check if anything changed
+    const hasChanges = updatedMolecule.atoms.length !== molecule.atoms.length || 
+                      updatedMolecule.bonds.length !== molecule.bonds.length;
+    
+    // Update molecule if we made changes
+    if (hasChanges) {
+      console.log('Calling onMoleculeChange with updated molecule');
+      console.log('Updated molecule after hydrogen changes:', {
+        atoms: updatedMolecule.atoms.length,
+        bonds: updatedMolecule.bonds.length,
+        hydrogens: updatedMolecule.atoms.filter(a => a.element === 'H').length
+      });
+      onMoleculeChange(updatedMolecule);
+    } else {
+      console.log('No hydrogen changes needed');
+    }
+    
+    // Clear the flag after a short delay to allow React to finish updating
+    setTimeout(() => {
+      isUpdatingHydrogens.current = false;
+    }, 100);
+    
+    console.log('=== END HYDROGEN AUTO-FILL ===');
+  }, [molecule.atoms.length, molecule.bonds.length]); // Only trigger on structural changes, not molecule reference changes
 
   const getCanvasPoint = useCallback((clientX: number, clientY: number): Point => {
     if (!svgRef.current) return { x: 0, y: 0 };
@@ -68,6 +127,48 @@ export function ChemCanvas({
     }) || null;
     
     return foundAtom;
+  };
+
+  const findBondAtPoint = (point: Point): Bond | null => {
+    return molecule.bonds.find(bond => {
+      const atom1 = molecule.atoms.find(a => a.id === bond.sourceAtomId);
+      const atom2 = molecule.atoms.find(a => a.id === bond.targetAtomId);
+      
+      if (!atom1 || !atom2) return false;
+      
+      // Calculate distance from point to line segment
+      const lineLength = Math.sqrt(
+        Math.pow(atom2.position.x - atom1.position.x, 2) + 
+        Math.pow(atom2.position.y - atom1.position.y, 2)
+      );
+      
+      if (lineLength === 0) return false;
+      
+      // Vector from atom1 to atom2
+      const lineUnitX = (atom2.position.x - atom1.position.x) / lineLength;
+      const lineUnitY = (atom2.position.y - atom1.position.y) / lineLength;
+      
+      // Vector from atom1 to click point
+      const pointVecX = point.x - atom1.position.x;
+      const pointVecY = point.y - atom1.position.y;
+      
+      // Project point onto line
+      const projectionLength = pointVecX * lineUnitX + pointVecY * lineUnitY;
+      
+      // Clamp projection to line segment
+      const clampedProjection = Math.max(0, Math.min(lineLength, projectionLength));
+      
+      // Find closest point on line segment
+      const closestX = atom1.position.x + clampedProjection * lineUnitX;
+      const closestY = atom1.position.y + clampedProjection * lineUnitY;
+      
+      // Calculate distance from click point to closest point on line
+      const distance = Math.sqrt(
+        Math.pow(point.x - closestX, 2) + Math.pow(point.y - closestY, 2)
+      );
+      
+      return distance <= 8; // Bond click tolerance
+    }) || null;
   };
 
   const handleCanvasClick = useCallback((event: React.MouseEvent) => {
@@ -113,19 +214,45 @@ export function ChemCanvas({
           element: selectedElement,
           position: snappedPoint,
         };
-        onMoleculeChange({
+        
+        // Add the atom first
+        const moleculeWithNewAtom = {
           ...molecule,
           atoms: [...molecule.atoms, newAtom],
-        });
+        };
+        
+        // Then add hydrogens to complete valence (except for hydrogen atoms)
+        if (selectedElement !== 'H') {
+          const finalMolecule = HydrogenManager.onAtomCreated(newAtom, moleculeWithNewAtom);
+          onMoleculeChange(finalMolecule);
+        } else {
+          onMoleculeChange(moleculeWithNewAtom);
+        }
       }
-    } else if (selectedTool === 'eraser' && existingAtom) {
-      // Remove atom and all connected bonds
-      const updatedAtoms = molecule.atoms.filter(atom => atom.id !== existingAtom.id);
-      const updatedBonds = molecule.bonds.filter(
-        bond => bond.atomId1 !== existingAtom.id && bond.atomId2 !== existingAtom.id
-      );
-      onMoleculeChange({ atoms: updatedAtoms, bonds: updatedBonds });
-      setSelectedAtom(null);
+    } else if (selectedTool === 'eraser') {
+      if (existingAtom) {
+        // Remove atom and all connected bonds, including hydrogen atoms
+        const updatedMolecule = HydrogenManager.onAtomDeleted(existingAtom.id, molecule);
+        onMoleculeChange(updatedMolecule);
+        setSelectedAtom(null);
+      } else {
+        // Check if we clicked on a bond
+        console.log('Checking for bond at point:', point);
+        const clickedBond = findBondAtPoint(point);
+        console.log('Found bond:', clickedBond);
+        
+        if (clickedBond) {
+          console.log('Deleting bond:', clickedBond.id);
+          
+          // Remove the bond
+          const updatedBonds = molecule.bonds.filter(bond => bond.id !== clickedBond.id);
+          const updatedMolecule = { ...molecule, bonds: updatedBonds };
+          
+          // Update hydrogens for both atoms affected by the bond removal
+          const finalMolecule = HydrogenManager.onBondDeleted(clickedBond, updatedMolecule);
+          onMoleculeChange(finalMolecule);
+        }
+      }
     }
   }, [molecule, selectedTool, selectedElement, getCanvasPoint, onMoleculeChange, isDragging]);
 
@@ -253,8 +380,8 @@ export function ChemCanvas({
         // Check if bond already exists
         const existingBond = molecule.bonds.find(
           bond =>
-            (bond.atomId1 === startAtom.id && bond.atomId2 === endAtom.id) ||
-            (bond.atomId1 === endAtom.id && bond.atomId2 === startAtom.id)
+            (bond.sourceAtomId === startAtom.id && bond.targetAtomId === endAtom.id) ||
+            (bond.sourceAtomId === endAtom.id && bond.targetAtomId === startAtom.id)
         );
 
         if (existingBond) {
@@ -264,19 +391,31 @@ export function ChemCanvas({
               ? { ...bond, type: selectedBondType }
               : bond
           );
-          onMoleculeChange({ ...molecule, bonds: updatedBonds });
+          
+          // Create molecule with updated bond
+          const moleculeWithUpdatedBond = { ...molecule, bonds: updatedBonds };
+          
+          // Update hydrogens for both atoms affected by the bond type change
+          const finalMolecule = HydrogenManager.onBondTypeChanged(existingBond, moleculeWithUpdatedBond);
+          onMoleculeChange(finalMolecule);
         } else {
           // Create new bond
           const newBond: Bond = {
             id: uuidv4(),
-            atomId1: startAtom.id,
-            atomId2: endAtom.id,
+            sourceAtomId: startAtom.id,
+            targetAtomId: endAtom.id,
             type: selectedBondType,
           };
-          onMoleculeChange({
+          
+          // Add bond first
+          const moleculeWithBond = {
             ...molecule,
             bonds: [...molecule.bonds, newBond],
-          });
+          };
+          
+          // Then update hydrogens for both atoms
+          const finalMolecule = HydrogenManager.onBondCreated(newBond, moleculeWithBond);
+          onMoleculeChange(finalMolecule);
         }
       } else if (!endAtom && startAtom) {
         // Create new atom at end point
@@ -287,14 +426,25 @@ export function ChemCanvas({
         };
         const newBond: Bond = {
           id: uuidv4(),
-          atomId1: startAtom.id,
-          atomId2: newAtom.id,
+          sourceAtomId: startAtom.id,
+          targetAtomId: newAtom.id,
           type: selectedBondType,
         };
-        onMoleculeChange({
+        
+        // Add new atom and bond
+        let moleculeWithNewAtom = {
           atoms: [...molecule.atoms, newAtom],
           bonds: [...molecule.bonds, newBond],
-        });
+        };
+        
+        // Add hydrogens to the new atom if it's not hydrogen
+        if (selectedElement !== 'H') {
+          moleculeWithNewAtom = HydrogenManager.onAtomCreated(newAtom, moleculeWithNewAtom);
+        }
+        
+        // Update hydrogens for the source atom
+        const finalMolecule = HydrogenManager.onBondCreated(newBond, moleculeWithNewAtom);
+        onMoleculeChange(finalMolecule);
       }
 
       setDragStart(null);
@@ -303,8 +453,8 @@ export function ChemCanvas({
   }, [selectedTool, draggedAtom, isDragging, dragStart, molecule, selectedBondType, selectedElement, getCanvasPoint, onMoleculeChange]);
 
   const renderBond = (bond: Bond) => {
-    const atom1 = molecule.atoms.find(a => a.id === bond.atomId1);
-    const atom2 = molecule.atoms.find(a => a.id === bond.atomId2);
+    const atom1 = molecule.atoms.find(a => a.id === bond.sourceAtomId);
+    const atom2 = molecule.atoms.find(a => a.id === bond.targetAtomId);
     
     if (!atom1 || !atom2) return null;
 
@@ -349,13 +499,82 @@ export function ChemCanvas({
           />
         </g>
       );
+    } else if (bond.type === 'triple') {
+      const dx = atom2.position.x - atom1.position.x;
+      const dy = atom2.position.y - atom1.position.y;
+      const length = Math.sqrt(dx * dx + dy * dy);
+      const offsetX = (-dy / length) * bondOffset;
+      const offsetY = (dx / length) * bondOffset;
+
+      return (
+        <g key={bond.id}>
+          {/* Center line */}
+          <line
+            x1={atom1.position.x}
+            y1={atom1.position.y}
+            x2={atom2.position.x}
+            y2={atom2.position.y}
+            stroke="#374151"
+            strokeWidth="2"
+          />
+          {/* Top line */}
+          <line
+            x1={atom1.position.x + offsetX}
+            y1={atom1.position.y + offsetY}
+            x2={atom2.position.x + offsetX}
+            y2={atom2.position.y + offsetY}
+            stroke="#374151"
+            strokeWidth="2"
+          />
+          {/* Bottom line */}
+          <line
+            x1={atom1.position.x - offsetX}
+            y1={atom1.position.y - offsetY}
+            x2={atom2.position.x - offsetX}
+            y2={atom2.position.y - offsetY}
+            stroke="#374151"
+            strokeWidth="2"
+          />
+        </g>
+      );
+    } else if (bond.type === 'wedge') {
+      // Wedge bond rendering (3D representation)
+      const dx = atom2.position.x - atom1.position.x;
+      const dy = atom2.position.y - atom1.position.y;
+      const length = Math.sqrt(dx * dx + dy * dy);
+      const offsetX = (-dy / length) * 4;
+      const offsetY = (dx / length) * 4;
+
+      return (
+        <polygon
+          key={bond.id}
+          points={`${atom1.position.x},${atom1.position.y} ${atom2.position.x + offsetX},${atom2.position.y + offsetY} ${atom2.position.x - offsetX},${atom2.position.y - offsetY}`}
+          fill="#374151"
+          stroke="#374151"
+          strokeWidth="1"
+        />
+      );
+    } else if (bond.type === 'dash') {
+      // Dashed bond rendering (3D representation - going into page)
+      return (
+        <line
+          key={bond.id}
+          x1={atom1.position.x}
+          y1={atom1.position.y}
+          x2={atom2.position.x}
+          y2={atom2.position.y}
+          stroke="#374151"
+          strokeWidth="2"
+          strokeDasharray="5,3"
+        />
+      );
     }
 
     return null;
   };
 
   const renderAtom = (atom: Atom) => {
-    const color = elementColors[atom.element];
+    const color = elementColors[atom.element as ElementSymbol];
     const isSelected = selectedAtom === atom.id;
     const isHovered = hoveredAtom === atom.id && selectedTool === 'select';
     const isDraggedAtom = draggedAtom === atom.id;
