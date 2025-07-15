@@ -69,6 +69,20 @@ export function oclMoleculeToGraph(mol: OCL.Molecule): MoleculeGraph {
     }
   }
 
+  // Snap non-hydrogen atoms to grid
+  const GRID_SIZE = 40;
+  function snapToGrid(point: { x: number, y: number }) {
+    return {
+      x: Math.round(point.x / GRID_SIZE) * GRID_SIZE,
+      y: Math.round(point.y / GRID_SIZE) * GRID_SIZE,
+    };
+  }
+  for (const atom of atoms) {
+    if (atom.element !== 'H') {
+      atom.position = snapToGrid(atom.position);
+    }
+  }
+
   for (let i = 0; i < mol.getAllBonds(); i++) {
     const source = mol.getBondAtom(0, i);
     const target = mol.getBondAtom(1, i);
