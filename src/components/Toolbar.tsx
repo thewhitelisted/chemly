@@ -35,7 +35,7 @@ export function Toolbar({
   return (
     <div className="w-16 bg-white dark:bg-zinc-900 border-r border-gray-200 dark:border-zinc-800 flex flex-col items-center py-4 shadow-sm relative transition-colors">
       {/* Tool Selection */}
-      <div className="flex flex-col gap-1 mb-6 items-center self-center w-full">
+      <div className="flex flex-col gap-1 mb-2 items-center self-center w-full">
         <div className="text-base text-gray-900 dark:text-gray-100 mb-2 font-semibold text-center">Tools</div>
         <div className="flex flex-col gap-2 w-full items-center">
         <button
@@ -77,7 +77,7 @@ export function Toolbar({
       </div>
 
       {/* Element Picker */}
-      <div className="flex flex-col gap-1 mb-6 items-center self-center w-full">
+      <div className="flex flex-col gap-1 mb-4 items-center self-center w-full">
         <div className="text-base text-gray-900 dark:text-gray-100 mb-2 font-semibold text-center">Atoms</div>
         <div className="flex flex-col items-center gap-1 w-full">
           {elements.map((element) => (

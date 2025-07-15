@@ -53,41 +53,62 @@ export function oclMoleculeToGraph(mol: OCL.Molecule): MoleculeGraph {
 
   // Center the molecule in the canvas at (400, 300)
   if (atoms.length > 0) {
-    const minX = Math.min(...atoms.map(a => a.position.x));
-    const maxX = Math.max(...atoms.map(a => a.position.x));
-    const minY = Math.min(...atoms.map(a => a.position.y));
-    const maxY = Math.max(...atoms.map(a => a.position.y));
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
-    const canvasCenterX = 400;
-    const canvasCenterY = 300;
-    const offsetX = canvasCenterX - centerX;
-    const offsetY = canvasCenterY - centerY;
-    for (const atom of atoms) {
-      atom.position.x += offsetX;
-      atom.position.y += offsetY;
-    }
-    // Scale so that average bond length between non-hydrogen atoms is TARGET_BOND_LENGTH
-    const TARGET_BOND_LENGTH = 75;
-    // Find all bonds between non-hydrogen atoms
-    const heavyAtomBonds = bonds
-      .map(bond => {
-        const a1 = atoms.find(a => a.id === bond.sourceAtomId);
-        const a2 = atoms.find(a => a.id === bond.targetAtomId);
-        return (a1 && a2 && a1.element !== 'H' && a2.element !== 'H') ? { a1, a2 } : null;
-      })
-      .filter(Boolean) as { a1: Atom, a2: Atom }[];
-    if (heavyAtomBonds.length > 0) {
-      const avgBondLength =
-        heavyAtomBonds.reduce((sum, { a1, a2 }) => {
-          const dx = a1.position.x - a2.position.x;
-          const dy = a1.position.y - a2.position.y;
-          return sum + Math.sqrt(dx * dx + dy * dy);
-        }, 0) / heavyAtomBonds.length;
-      const scale = TARGET_BOND_LENGTH / avgBondLength;
+    if (bonds.length === 0) {
+      // All atoms are disconnected: arrange in a grid
+      const gridSpacing = 140;
+      const canvasCenterX = 400;
+      const canvasCenterY = 300;
+      const n = atoms.length;
+      const cols = Math.ceil(Math.sqrt(n));
+      const rows = Math.ceil(n / cols);
+      // Calculate top-left corner to center the grid
+      const totalWidth = (cols - 1) * gridSpacing;
+      const totalHeight = (rows - 1) * gridSpacing;
+      const startX = canvasCenterX - totalWidth / 2;
+      const startY = canvasCenterY - totalHeight / 2;
+      for (let i = 0; i < n; i++) {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        atoms[i].position.x = startX + col * gridSpacing;
+        atoms[i].position.y = startY + row * gridSpacing;
+      }
+    } else {
+      const minX = Math.min(...atoms.map(a => a.position.x));
+      const maxX = Math.max(...atoms.map(a => a.position.x));
+      const minY = Math.min(...atoms.map(a => a.position.y));
+      const maxY = Math.max(...atoms.map(a => a.position.y));
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+      const canvasCenterX = 400;
+      const canvasCenterY = 300;
+      const offsetX = canvasCenterX - centerX;
+      const offsetY = canvasCenterY - centerY;
       for (const atom of atoms) {
-        atom.position.x = canvasCenterX + (atom.position.x - canvasCenterX) * scale;
-        atom.position.y = canvasCenterY + (atom.position.y - canvasCenterY) * scale;
+        atom.position.x += offsetX;
+        atom.position.y += offsetY;
+      }
+      // Scale so that average bond length between non-hydrogen atoms is TARGET_BOND_LENGTH
+      const TARGET_BOND_LENGTH = 75;
+      // Find all bonds between non-hydrogen atoms
+      const heavyAtomBonds = bonds
+        .map(bond => {
+          const a1 = atoms.find(a => a.id === bond.sourceAtomId);
+          const a2 = atoms.find(a => a.id === bond.targetAtomId);
+          return (a1 && a2 && a1.element !== 'H' && a2.element !== 'H') ? { a1, a2 } : null;
+        })
+        .filter(Boolean) as { a1: Atom, a2: Atom }[];
+      if (heavyAtomBonds.length > 0) {
+        const avgBondLength =
+          heavyAtomBonds.reduce((sum, { a1, a2 }) => {
+            const dx = a1.position.x - a2.position.x;
+            const dy = a1.position.y - a2.position.y;
+            return sum + Math.sqrt(dx * dx + dy * dy);
+          }, 0) / heavyAtomBonds.length;
+        const scale = TARGET_BOND_LENGTH / avgBondLength;
+        for (const atom of atoms) {
+          atom.position.x = canvasCenterX + (atom.position.x - canvasCenterX) * scale;
+          atom.position.y = canvasCenterY + (atom.position.y - canvasCenterY) * scale;
+        }
       }
     }
   }
