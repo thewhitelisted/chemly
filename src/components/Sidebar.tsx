@@ -4,6 +4,7 @@ import type { Molecule, ValidationWarning } from '../types/chemistry';
 import { exportToSmiles } from '../utils/graphToSmiles';
 import { importFromSmiles } from '../utils/smilesToGraph';
 import { validateStructure } from '../utils/validateStructure';
+import * as OCL from 'openchemlib';
 
 interface SidebarProps {
   molecule: Molecule;
@@ -22,6 +23,8 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
     warnings: [] 
   });
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [moleculeName, setMoleculeName] = useState('');
+  const [isNaming, setIsNaming] = useState(false);
 
   // Update SMILES when molecule changes
   useEffect(() => {
@@ -50,6 +53,33 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
     const newValidation = validateStructure(molecule);
     setValidation(newValidation);
   }, [molecule]);
+
+  // Update molecule name when molecule or currentSmiles changes
+  useEffect(() => {
+    const fetchName = async () => {
+      setIsNaming(true);
+      try {
+        if (!currentSmiles) {
+          setMoleculeName('');
+          setIsNaming(false);
+          return;
+        }
+        const response = await fetch(`https://cactus.nci.nih.gov/chemical/structure/${encodeURIComponent(currentSmiles)}/iupac_name`);
+        if (!response.ok) throw new Error('CACTUS request failed');
+        const name = await response.text();
+        setMoleculeName(name.trim() || 'No name found');
+      } catch (e) {
+        setMoleculeName('No name found');
+      } finally {
+        setIsNaming(false);
+      }
+    };
+    if (currentSmiles) {
+      fetchName();
+    } else {
+      setMoleculeName('');
+    }
+  }, [currentSmiles]);
 
   const handleCopySmiles = async () => {
     try {
@@ -186,6 +216,19 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
             <Copy className="w-4 h-4" />
             {copied ? 'Copied!' : 'Copy SMILES'}
           </button>
+        </div>
+      </div>
+
+      {/* Molecule Name (OpenChemLib) */}
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+          <FileText className="w-4 h-4" />
+          <span className="dark:text-gray-100">Molecule Name</span>
+        </h3>
+        <div className="p-3 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-md">
+          <span className="text-sm text-gray-700 dark:text-gray-100 font-mono break-all bg-transparent">
+            {isNaming ? 'Generating...' : moleculeName || 'No name found'}
+          </span>
         </div>
       </div>
 
