@@ -2,6 +2,7 @@ import { useRef, useCallback, useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import type { Molecule, Atom, Bond, Point, ElementSymbol, BondType } from '../types/chemistry';
 import { HydrogenManager } from '../utils/hydrogenManager';
+import { getAttachedHydrogens } from '../utils/oclGraphAdapter';
 
 interface ChemCanvasProps {
   molecule: Molecule;
@@ -14,7 +15,6 @@ interface ChemCanvasProps {
 }
 
 const ATOM_RADIUS = 15;
-const GRID_SIZE = 40;
 
 const elementColors: Record<ElementSymbol, string> = {
   C: '#1f2937', // gray-800
@@ -56,6 +56,7 @@ export function ChemCanvas({
   
   // Track if we're currently updating hydrogens to prevent infinite loops
   const isUpdatingHydrogens = useRef(false);
+  const prevAtomBondCounts = useRef({ atomCount: molecule.atoms.length, bondCount: molecule.bonds.length });
 
   // Reset hover state when tool changes to ensure cursor updates immediately
   useEffect(() => {
@@ -69,6 +70,18 @@ export function ChemCanvas({
 
   // Auto-fill hydrogens for atoms that need them when molecule changes (e.g., from SMILES import)
   useEffect(() => {
+    // Only run if the number of atoms or bonds changes (not just positions)
+    const atomCount = molecule.atoms.length;
+    const bondCount = molecule.bonds.length;
+    if (
+      prevAtomBondCounts.current.atomCount === atomCount &&
+      prevAtomBondCounts.current.bondCount === bondCount
+    ) {
+      // No structural change, skip hydrogen auto-fill
+      return;
+    }
+    prevAtomBondCounts.current = { atomCount, bondCount };
+
     // Prevent infinite loops - if we're already updating hydrogens, skip this run
     if (isUpdatingHydrogens.current) {
       console.log('Skipping hydrogen auto-fill - already updating');
@@ -142,13 +155,6 @@ export function ChemCanvas({
     };
   }, [canvasOffset, scale]);
 
-  const snapToGrid = (point: Point): Point => {
-    return {
-      x: Math.round(point.x / GRID_SIZE) * GRID_SIZE,
-      y: Math.round(point.y / GRID_SIZE) * GRID_SIZE,
-    };
-  };
-
   const findAtomAtPoint = (point: Point): Atom | null => {
     const foundAtom = molecule.atoms.find(atom => {
       const distance = Math.sqrt(
@@ -210,8 +216,7 @@ export function ChemCanvas({
     event.preventDefault();
     event.stopPropagation();
     const point = getCanvasPoint(event.clientX, event.clientY);
-    const snappedPoint = snapToGrid(point);
-    const existingAtom = findAtomAtPoint(snappedPoint);
+    const existingAtom = findAtomAtPoint(point);
 
     if (selectedTool === 'select') {
       // For select tool, handle selection and bond clicking
@@ -277,7 +282,7 @@ export function ChemCanvas({
         const newAtom: Atom = {
           id: uuidv4(),
           element: selectedElement,
-          position: snappedPoint,
+          position: point,
         };
         
         // Add the atom first
@@ -296,7 +301,7 @@ export function ChemCanvas({
       }
     } else if (selectedTool === 'eraser') {
       // Try to delete atom first (broaden tolerance)
-      const atomToDelete = findAtomAtPoint(point) || findAtomAtPoint(snappedPoint);
+      const atomToDelete = findAtomAtPoint(point) || findAtomAtPoint(point);
       if (atomToDelete) {
         let updatedMolecule = HydrogenManager.onAtomDeleted(atomToDelete.id, molecule);
         // Extra safety: update hydrogens for all non-hydrogen atoms
@@ -333,7 +338,6 @@ export function ChemCanvas({
     event.preventDefault();
     event.stopPropagation();
     const rawPoint = getCanvasPoint(event.clientX, event.clientY);
-    const snappedPoint = snapToGrid(rawPoint);
     if (selectedTool === 'pan') {
       // Start panning, clear any atom drag state
       setDraggedAtom(null);
@@ -348,7 +352,7 @@ export function ChemCanvas({
         });
       }
     } else if (selectedTool === 'select') {
-      const atom = findAtomAtPoint(rawPoint) || findAtomAtPoint(snappedPoint);
+      const atom = findAtomAtPoint(rawPoint) || findAtomAtPoint(rawPoint);
       if (atom) {
         // Only allow individual selection if no dragStart (i.e., not starting a selection box)
         if (!dragStart) {
@@ -357,7 +361,7 @@ export function ChemCanvas({
             setDraggedAtom(atom.id);
             setIsDragging(true);
             setGroupDragStart({
-              mouse: snappedPoint,
+              mouse: rawPoint,
               atomPositions: Object.fromEntries(
                 molecule.atoms.filter(a => selectedAtoms.includes(a.id)).map(a => [a.id, { ...a.position }])
               )
@@ -367,7 +371,7 @@ export function ChemCanvas({
             setDraggedAtom(atom.id);
             setIsDragging(true);
             setGroupDragStart({
-              mouse: snappedPoint,
+              mouse: rawPoint,
               atomPositions: { [atom.id]: { ...atom.position } }
             });
           } else {
@@ -376,7 +380,7 @@ export function ChemCanvas({
             setDraggedAtom(atom.id);
             setIsDragging(true);
             setGroupDragStart({
-              mouse: snappedPoint,
+              mouse: rawPoint,
               atomPositions: { [atom.id]: { ...atom.position } }
             });
           }
@@ -392,7 +396,7 @@ export function ChemCanvas({
       }
     } else if (selectedTool === 'atom') {
       // For atom tool, check if we're clicking on an existing atom to start bond creation
-      const foundAtom = findAtomAtPoint(rawPoint) || findAtomAtPoint(snappedPoint);
+      const foundAtom = findAtomAtPoint(rawPoint) || findAtomAtPoint(rawPoint);
       if (foundAtom) {
         console.log('Starting atom bond creation from:', foundAtom.id);
         setDraggedAtom(foundAtom.id);
@@ -404,7 +408,6 @@ export function ChemCanvas({
 
   const handleMouseMove = useCallback((event: React.MouseEvent) => {
     const rawPoint = getCanvasPoint(event.clientX, event.clientY);
-    const snappedPoint = snapToGrid(rawPoint);
 
     if (selectedTool === 'pan' && isPanning && panStart) {
       // Handle panning (atom drag state is ignored)
@@ -454,8 +457,9 @@ export function ChemCanvas({
     }
 
     if (selectedTool === 'select' && draggedAtom && isDragging && groupDragStart && selectedAtoms.length > 0) {
-      const deltaX = snappedPoint.x - groupDragStart.mouse.x;
-      const deltaY = snappedPoint.y - groupDragStart.mouse.y;
+      const deltaX = rawPoint.x - groupDragStart.mouse.x;
+      const deltaY = rawPoint.y - groupDragStart.mouse.y;
+      // Only move selected atoms (do not move hydrogens directly)
       const updatedAtoms = molecule.atoms.map(atom =>
         selectedAtoms.includes(atom.id)
           ? { ...atom, position: {
@@ -464,7 +468,16 @@ export function ChemCanvas({
             } }
           : atom
       );
-      onMoleculeChange({ ...molecule, atoms: updatedAtoms });
+      // After moving, recalculate hydrogens for all moved heavy atoms
+      const movedHeavyAtomIds = selectedAtoms.filter(atomId => {
+        const atom = molecule.atoms.find(a => a.id === atomId);
+        return atom && atom.element !== 'H';
+      });
+      let updatedMolecule = { ...molecule, atoms: updatedAtoms };
+      if (movedHeavyAtomIds.length > 0) {
+        updatedMolecule = HydrogenManager.updateHydrogensForAtoms(movedHeavyAtomIds, updatedMolecule);
+      }
+      onMoleculeChange(updatedMolecule);
       setPreviewBond(null); // No bond preview in move mode
     } else if (selectedTool === 'select' && dragStart) {
       // Only start select box if drag exceeds threshold
@@ -483,7 +496,7 @@ export function ChemCanvas({
       
       if (dragDistance > 8) {
         // Show preview bond to where the new atom will be created
-        setPreviewBond({ start: dragStart, end: snappedPoint });
+        setPreviewBond({ start: dragStart, end: rawPoint });
       }
     }
   }, [selectedTool, draggedAtom, dragStart, isDragging, selectedAtom, isPanning, panStart, canvasOffset, scale, getCanvasPoint, molecule, onMoleculeChange, onCanvasTransformChange, groupDragStart, selectedAtoms, selectBox, pendingBoxStart, isMouseDown]);
@@ -536,8 +549,7 @@ export function ChemCanvas({
       // Only clear selection if this was a click on empty space (not a drag or group move)
       if (!selectBox && !dragStart && !draggedAtom && !isDragging) {
         const rawPoint = getCanvasPoint(event.clientX, event.clientY);
-        const snappedPoint = snapToGrid(rawPoint);
-        const atom = findAtomAtPoint(rawPoint) || findAtomAtPoint(snappedPoint);
+        const atom = findAtomAtPoint(rawPoint) || findAtomAtPoint(rawPoint);
         if (atom) {
           setSelectedAtoms([atom.id]);
         } else {
@@ -564,7 +576,6 @@ export function ChemCanvas({
     } else if (selectedTool === 'atom' && draggedAtom && dragStart) {
       // Create new atom with bond from the dragged atom
       const rawPoint = getCanvasPoint(event.clientX, event.clientY);
-      const snappedPoint = snapToGrid(rawPoint);
       const startAtom = molecule.atoms.find(a => a.id === draggedAtom);
       
       // Check if we dragged far enough to create a new atom
@@ -574,7 +585,7 @@ export function ChemCanvas({
       
       if (startAtom && dragDistance > 8) {
         // Check if there's already an atom at the target position
-        const existingAtom = findAtomAtPoint(snappedPoint);
+        const existingAtom = findAtomAtPoint(rawPoint);
         if (existingAtom && existingAtom.id !== startAtom.id) {
           // Connect to existing atom instead of creating new one
           const existingBond = molecule.bonds.find(
@@ -602,7 +613,7 @@ export function ChemCanvas({
           const newAtom: Atom = {
             id: uuidv4(),
             element: selectedElement,
-            position: snappedPoint,
+            position: rawPoint,
           };
           // Create bond between start atom and new atom
           const newBond: Bond = {
@@ -887,34 +898,8 @@ export function ChemCanvas({
         }}
         onWheel={handleWheel}
       >
-        {/* Grid Pattern */}
-        <defs>
-          <pattern
-            id="grid"
-            width={GRID_SIZE}
-            height={GRID_SIZE}
-            patternUnits="userSpaceOnUse"
-          >
-            <path
-              d={`M ${GRID_SIZE} 0 L 0 0 0 ${GRID_SIZE}`}
-              fill="none"
-              stroke="#d1d5db"
-              strokeWidth="2.5"
-            />
-          </pattern>
-        </defs>
-
         {/* Main content group with transform */}
         <g transform={`translate(${canvasOffset.x}, ${canvasOffset.y}) scale(${scale})`}>
-          {/* Background grid that moves with content */}
-          <rect 
-            x={-10000} 
-            y={-10000} 
-            width={20000} 
-            height={20000} 
-            fill="url(#grid)" 
-          />
-
           {/* Render bonds first */}
           {molecule.bonds.map(renderBond)}
 

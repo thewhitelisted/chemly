@@ -1,4 +1,4 @@
-import { MousePointer, Eraser, Move } from 'lucide-react';
+import { MousePointer, Eraser, Move, Sparkles } from 'lucide-react';
 import type { ElementSymbol } from '../types/chemistry';
 
 interface ToolbarProps {
@@ -6,6 +6,7 @@ interface ToolbarProps {
   selectedTool: 'atom' | 'select' | 'eraser' | 'pan';
   onElementSelect: (element: ElementSymbol) => void;
   onToolSelect: (tool: 'atom' | 'select' | 'eraser' | 'pan') => void;
+  onCleanStructure: () => void; // <-- Add this prop
 }
 
 const elements: { symbol: ElementSymbol; name: string; color: string }[] = [
@@ -25,9 +26,10 @@ export function Toolbar({
   selectedTool,
   onElementSelect,
   onToolSelect,
+  onCleanStructure, // <-- Add this prop
 }: ToolbarProps) {
   return (
-    <div className="w-16 bg-white border-r border-gray-200 flex flex-col items-center py-4 shadow-sm">
+    <div className="w-16 bg-white border-r border-gray-200 flex flex-col items-center py-4 shadow-sm relative">
       {/* Tool Selection */}
       <div className="flex flex-col gap-1 mb-6 items-center self-center w-full">
         <div className="text-base text-gray-900 mb-2 font-semibold text-center">Tools</div>
@@ -91,6 +93,16 @@ export function Toolbar({
         </div>
       </div>
       
+      {/* Clean Structure Button at the bottom */}
+      <div className="w-full flex flex-col items-center" style={{ position: 'absolute', bottom: 16, left: 0 }}>
+        <button
+          onClick={onCleanStructure}
+          className="w-10 h-10 rounded-lg bg-indigo-500 text-white font-semibold hover:bg-indigo-600 transition-colors flex items-center justify-center"
+          title="Clean Structure"
+        >
+          <Sparkles size={22} />
+        </button>
+      </div>
     </div>
   );
 }

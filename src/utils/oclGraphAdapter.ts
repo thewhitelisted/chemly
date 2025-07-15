@@ -34,6 +34,23 @@ export function oclMoleculeToGraph(mol: OCL.Molecule): MoleculeGraph {
     atomIdMap[i] = atom.id;
   }
 
+  // Create bonds before centering/scaling
+  for (let i = 0; i < mol.getAllBonds(); i++) {
+    const source = mol.getBondAtom(0, i);
+    const target = mol.getBondAtom(1, i);
+    const order = mol.getBondOrder(i);
+    let type: Bond['type'] = 'single';
+    if (order === 2) type = 'double';
+    else if (order === 3) type = 'triple';
+    // Stereochemistry not handled here
+    bonds.push({
+      id: uuidv4(),
+      sourceAtomId: atomIdMap[source],
+      targetAtomId: atomIdMap[target],
+      type,
+    });
+  }
+
   // Center the molecule in the canvas at (400, 300)
   if (atoms.length > 0) {
     const minX = Math.min(...atoms.map(a => a.position.x));
@@ -50,18 +67,24 @@ export function oclMoleculeToGraph(mol: OCL.Molecule): MoleculeGraph {
       atom.position.x += offsetX;
       atom.position.y += offsetY;
     }
-    // After centering, scale the molecule to a reasonable size
-    if (atoms.length > 1) {
-      const minX2 = Math.min(...atoms.map(a => a.position.x));
-      const maxX2 = Math.max(...atoms.map(a => a.position.x));
-      const minY2 = Math.min(...atoms.map(a => a.position.y));
-      const maxY2 = Math.max(...atoms.map(a => a.position.y));
-      const width = maxX2 - minX2;
-      const height = maxY2 - minY2;
-      const targetWidth = 200;
-      const targetHeight = 200;
-      const scale = Math.min(targetWidth / width, targetHeight / height);
-      // Center point (after previous centering)
+    // Scale so that average bond length between non-hydrogen atoms is TARGET_BOND_LENGTH
+    const TARGET_BOND_LENGTH = 75;
+    // Find all bonds between non-hydrogen atoms
+    const heavyAtomBonds = bonds
+      .map(bond => {
+        const a1 = atoms.find(a => a.id === bond.sourceAtomId);
+        const a2 = atoms.find(a => a.id === bond.targetAtomId);
+        return (a1 && a2 && a1.element !== 'H' && a2.element !== 'H') ? { a1, a2 } : null;
+      })
+      .filter(Boolean) as { a1: Atom, a2: Atom }[];
+    if (heavyAtomBonds.length > 0) {
+      const avgBondLength =
+        heavyAtomBonds.reduce((sum, { a1, a2 }) => {
+          const dx = a1.position.x - a2.position.x;
+          const dy = a1.position.y - a2.position.y;
+          return sum + Math.sqrt(dx * dx + dy * dy);
+        }, 0) / heavyAtomBonds.length;
+      const scale = TARGET_BOND_LENGTH / avgBondLength;
       for (const atom of atoms) {
         atom.position.x = canvasCenterX + (atom.position.x - canvasCenterX) * scale;
         atom.position.y = canvasCenterY + (atom.position.y - canvasCenterY) * scale;
@@ -69,35 +92,7 @@ export function oclMoleculeToGraph(mol: OCL.Molecule): MoleculeGraph {
     }
   }
 
-  // Snap non-hydrogen atoms to grid
-  const GRID_SIZE = 40;
-  function snapToGrid(point: { x: number, y: number }) {
-    return {
-      x: Math.round(point.x / GRID_SIZE) * GRID_SIZE,
-      y: Math.round(point.y / GRID_SIZE) * GRID_SIZE,
-    };
-  }
-  for (const atom of atoms) {
-    if (atom.element !== 'H') {
-      atom.position = snapToGrid(atom.position);
-    }
-  }
-
-  for (let i = 0; i < mol.getAllBonds(); i++) {
-    const source = mol.getBondAtom(0, i);
-    const target = mol.getBondAtom(1, i);
-    const order = mol.getBondOrder(i);
-    let type: Bond['type'] = 'single';
-    if (order === 2) type = 'double';
-    else if (order === 3) type = 'triple';
-    // Stereochemistry not handled here
-    bonds.push({
-      id: uuidv4(),
-      sourceAtomId: atomIdMap[source],
-      targetAtomId: atomIdMap[target],
-      type,
-    });
-  }
+  // Remove grid snapping for free movement
 
   return { atoms, bonds };
 }
@@ -152,4 +147,58 @@ export function graphToOclMolecule(graph: MoleculeGraph): OCL.Molecule {
   }
   // TODO: If you want to support 2D coordinates, use OCL coordinate generation here
   return mol;
+}
+
+// Generate 2D coordinates for a MoleculeGraph using recursive placement
+export function generate2DCoordinatesForGraph(graph: MoleculeGraph): MoleculeGraph {
+  const STANDARD_BOND_LENGTH = 40;
+  const placed: Record<string, { x: number, y: number }> = {};
+  const visited = new Set<string>();
+  if (graph.atoms.length === 0) return graph;
+
+  // Start with the first atom at the center
+  const root = graph.atoms[0];
+  placed[root.id] = { x: 400, y: 300 };
+
+  function placeNeighbors(atomId: string, parentAngle: number | null) {
+    const atom = graph.atoms.find(a => a.id === atomId)!;
+    visited.add(atomId);
+    // Find neighbors (excluding parent)
+    const neighbors = graph.bonds
+      .filter(b => b.sourceAtomId === atomId || b.targetAtomId === atomId)
+      .map(b => b.sourceAtomId === atomId ? b.targetAtomId : b.sourceAtomId)
+      .filter(nid => !visited.has(nid));
+    // Determine angles for neighbors
+    const angleStep = (2 * Math.PI) / Math.max(neighbors.length, 1);
+    let startAngle = parentAngle !== null ? parentAngle + Math.PI : 0;
+    neighbors.forEach((neighborId, i) => {
+      const angle = startAngle + i * angleStep;
+      placed[neighborId] = {
+        x: placed[atomId].x + Math.cos(angle) * STANDARD_BOND_LENGTH,
+        y: placed[atomId].y + Math.sin(angle) * STANDARD_BOND_LENGTH,
+      };
+      placeNeighbors(neighborId, angle);
+    });
+  }
+  placeNeighbors(root.id, null);
+  // Update atom positions in the graph
+  const newAtoms = graph.atoms.map(atom => ({
+    ...atom,
+    position: placed[atom.id] || { x: 0, y: 0 },
+  }));
+  return { ...graph, atoms: newAtoms };
+}
+
+// Returns the ids of hydrogen atoms attached to a given atom
+export function getAttachedHydrogens(graph: MoleculeGraph, atomId: string): string[] {
+  const atom = graph.atoms.find(a => a.id === atomId);
+  if (!atom) return [];
+  // Find all bonds where this atom is one end and the other is a hydrogen
+  return graph.bonds
+    .filter(b => b.sourceAtomId === atomId || b.targetAtomId === atomId)
+    .map(b => b.sourceAtomId === atomId ? b.targetAtomId : b.sourceAtomId)
+    .filter(neighborId => {
+      const neighbor = graph.atoms.find(a => a.id === neighborId);
+      return neighbor && neighbor.element === 'H';
+    });
 } 

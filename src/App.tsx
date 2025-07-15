@@ -3,6 +3,9 @@ import { ChemCanvas } from './components/ChemCanvas';
 import { Toolbar } from './components/Toolbar';
 import { Sidebar } from './components/Sidebar';
 import type { DrawingState, ElementSymbol, Molecule, Point } from './types/chemistry';
+import { graphToOclMolecule, oclMoleculeToGraph } from './utils/oclGraphAdapter';
+import * as OCL from 'openchemlib';
+import { HydrogenManager } from './utils/hydrogenManager';
 
 function App() {
   const [drawingState, setDrawingState] = useState<DrawingState>({
@@ -20,50 +23,42 @@ function App() {
     setDrawingState(prev => ({ ...prev, ...updates }));
   };
 
-  const setSelectedElement = (element: ElementSymbol) => {
-    setDrawingState(prev => ({ ...prev, selectedElement: element, selectedTool: 'atom' }));
-  };
-
-  const setSelectedTool = (tool: 'atom' | 'select' | 'eraser' | 'pan') => {
-    setDrawingState(prev => ({ ...prev, selectedTool: tool }));
+  const handleCleanStructure = () => {
+    // Convert to OCL, roundtrip through SMILES to normalize, then back to graph
+    const oclMol = graphToOclMolecule(drawingState.molecule);
+    const smiles = oclMol.toSmiles();
+    const cleanedMol = OCL.Molecule.fromSmiles(smiles);
+    let cleanedGraph = oclMoleculeToGraph(cleanedMol);
+    // Remove and re-add hydrogens for correct layout
+    cleanedGraph = HydrogenManager.fillAllValences(cleanedGraph);
+    // Clear implicitHydrogens for all non-hydrogen atoms
+    cleanedGraph = {
+      ...cleanedGraph,
+      atoms: cleanedGraph.atoms.map(atom =>
+        atom.element === 'H' ? atom : { ...atom, implicitHydrogens: 0 }
+      ),
+    };
+    updateDrawingState({ molecule: cleanedGraph });
   };
 
   return (
-    <div 
-      className="h-screen w-screen overflow-hidden bg-gray-50 flex"
-      style={{ 
-        height: '100vh', 
-        width: '100vw', 
-        display: 'flex', 
-        overflow: 'hidden',
-        backgroundColor: '#f9fafb'
-      }}
-    >
-      {/* Left Toolbar */}
+    <div className="flex h-screen">
       <Toolbar
         selectedElement={drawingState.selectedElement}
         selectedTool={drawingState.selectedTool}
-        onElementSelect={setSelectedElement}
-        onToolSelect={setSelectedTool}
+        onElementSelect={el => updateDrawingState({ selectedElement: el, selectedTool: 'atom' })}
+        onToolSelect={tool => updateDrawingState({ selectedTool: tool })}
+        onCleanStructure={handleCleanStructure}
       />
-      
-      {/* Main Canvas Area */}
-      <div 
-        className="flex-1 flex flex-col"
-        style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
-      >
-        <ChemCanvas
-          molecule={drawingState.molecule}
-          selectedTool={drawingState.selectedTool}
-          selectedElement={drawingState.selectedElement}
-          canvasOffset={drawingState.canvasOffset}
-          scale={drawingState.scale}
-          onMoleculeChange={(molecule: Molecule) => updateDrawingState({ molecule })}
-          onCanvasTransformChange={(canvasOffset: Point, scale: number) => updateDrawingState({ canvasOffset, scale })}
-        />
-      </div>
-
-      {/* Right Sidebar */}
+      <ChemCanvas
+        molecule={drawingState.molecule}
+        selectedTool={drawingState.selectedTool}
+        selectedElement={drawingState.selectedElement}
+        canvasOffset={drawingState.canvasOffset}
+        scale={drawingState.scale}
+        onMoleculeChange={(molecule: Molecule) => updateDrawingState({ molecule })}
+        onCanvasTransformChange={(canvasOffset: Point, scale: number) => updateDrawingState({ canvasOffset, scale })}
+      />
       <Sidebar
         molecule={drawingState.molecule}
         onMoleculeChange={(molecule: Molecule) => updateDrawingState({ molecule })}
