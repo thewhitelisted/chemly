@@ -53,6 +53,7 @@ export function ChemCanvas({
   const [selectedAtoms, setSelectedAtoms] = useState<string[]>([]);
   const [pendingBoxStart, setPendingBoxStart] = useState<Point | null>(null);
   const [isMouseDown, setIsMouseDown] = useState(false);
+  const [hoveredBond, setHoveredBond] = useState<string | null>(null);
   
   // Track if we're currently updating hydrogens to prevent infinite loops
   const isUpdatingHydrogens = useRef(false);
@@ -61,6 +62,7 @@ export function ChemCanvas({
   // Reset hover state when tool changes to ensure cursor updates immediately
   useEffect(() => {
     setHoveredAtom(null);
+    setHoveredBond(null);
     setIsPanning(false);
     setPanStart(null);
     setDraggedAtom(null);
@@ -312,6 +314,7 @@ export function ChemCanvas({
         setSelectedAtom(null);
         setDraggedAtom(null);
         setHoveredAtom(null);
+        setHoveredBond(null);
         return;
       }
       // Try to delete bond if no atom found
@@ -324,6 +327,7 @@ export function ChemCanvas({
         setSelectedAtom(null);
         setDraggedAtom(null);
         setHoveredAtom(null);
+        setHoveredBond(null);
         return;
       }
       // If nothing found, do nothing
@@ -443,6 +447,15 @@ export function ChemCanvas({
       }
     }
 
+    // === ERASER TOOL HOVER LOGIC ===
+    if (selectedTool === 'eraser') {
+      const hoveredAtomObj = findAtomAtPoint(rawPoint);
+      const hoveredBondObj = !hoveredAtomObj ? findBondAtPoint(rawPoint) : null;
+      setHoveredAtom(hoveredAtomObj ? hoveredAtomObj.id : null);
+      setHoveredBond(hoveredBondObj ? hoveredBondObj.id : null);
+      return;
+    }
+
     // Update hovered atom for cursor changes (only when not dragging, not panning, and not in selection box drag)
     if (
       !draggedAtom &&
@@ -499,7 +512,7 @@ export function ChemCanvas({
         setPreviewBond({ start: dragStart, end: rawPoint });
       }
     }
-  }, [selectedTool, draggedAtom, dragStart, isDragging, selectedAtom, isPanning, panStart, canvasOffset, scale, getCanvasPoint, molecule, onMoleculeChange, onCanvasTransformChange, groupDragStart, selectedAtoms, selectBox, pendingBoxStart, isMouseDown]);
+  }, [selectedTool, draggedAtom, dragStart, isDragging, selectedAtom, isPanning, panStart, canvasOffset, scale, getCanvasPoint, molecule, onMoleculeChange, onCanvasTransformChange, groupDragStart, selectedAtoms, selectBox, pendingBoxStart, isMouseDown, hoveredAtom]);
 
   const handleMouseUp = useCallback((event: React.MouseEvent) => {
     setIsMouseDown(false);
@@ -714,18 +727,37 @@ export function ChemCanvas({
     if (!atom1 || !atom2) return null;
 
     const bondOffset = bond.type === 'double' ? 3 : bond.type === 'triple' ? 6 : 0;
-
-    if (bond.type === 'single') {
-      return (
+    const isHoveredForErase = selectedTool === 'eraser' && hoveredBond === bond.id;
+    // Render highlight for eraser hover (red overlay)
+    let highlight = null;
+    if (isHoveredForErase) {
+      highlight = (
         <line
-          key={bond.id}
           x1={atom1.position.x}
           y1={atom1.position.y}
           x2={atom2.position.x}
           y2={atom2.position.y}
-          stroke="#374151"
-          strokeWidth="2"
+          stroke="#ef4444"
+          strokeWidth="8"
+          opacity="0.4"
+          pointerEvents="none"
         />
+      );
+    }
+
+    if (bond.type === 'single') {
+      return (
+        <g key={bond.id}>
+          {highlight}
+          <line
+            x1={atom1.position.x}
+            y1={atom1.position.y}
+            x2={atom2.position.x}
+            y2={atom2.position.y}
+            stroke="#374151"
+            strokeWidth="2"
+          />
+        </g>
       );
     } else if (bond.type === 'double') {
       const dx = atom2.position.x - atom1.position.x;
@@ -736,6 +768,7 @@ export function ChemCanvas({
 
       return (
         <g key={bond.id}>
+          {highlight}
           <line
             x1={atom1.position.x + offsetX}
             y1={atom1.position.y + offsetY}
@@ -763,6 +796,7 @@ export function ChemCanvas({
 
       return (
         <g key={bond.id}>
+          {highlight}
           {/* Center line */}
           <line
             x1={atom1.position.x}
@@ -801,27 +835,31 @@ export function ChemCanvas({
       const offsetY = (dx / length) * 4;
 
       return (
-        <polygon
-          key={bond.id}
-          points={`${atom1.position.x},${atom1.position.y} ${atom2.position.x + offsetX},${atom2.position.y + offsetY} ${atom2.position.x - offsetX},${atom2.position.y - offsetY}`}
-          fill="#374151"
-          stroke="#374151"
-          strokeWidth="1"
-        />
+        <g key={bond.id}>
+          {highlight}
+          <polygon
+            points={`${atom1.position.x},${atom1.position.y} ${atom2.position.x + offsetX},${atom2.position.y + offsetY} ${atom2.position.x - offsetX},${atom2.position.y - offsetY}`}
+            fill="#374151"
+            stroke="#374151"
+            strokeWidth="1"
+          />
+        </g>
       );
     } else if (bond.type === 'dash') {
       // Dashed bond rendering (3D representation - going into page)
       return (
-        <line
-          key={bond.id}
-          x1={atom1.position.x}
-          y1={atom1.position.y}
-          x2={atom2.position.x}
-          y2={atom2.position.y}
-          stroke="#374151"
-          strokeWidth="2"
-          strokeDasharray="5,3"
-        />
+        <g key={bond.id}>
+          {highlight}
+          <line
+            x1={atom1.position.x}
+            y1={atom1.position.y}
+            x2={atom2.position.x}
+            y2={atom2.position.y}
+            stroke="#374151"
+            strokeWidth="2"
+            strokeDasharray="5,3"
+          />
+        </g>
       );
     }
 
@@ -833,18 +871,18 @@ export function ChemCanvas({
     const isSelected = selectedAtoms.includes(atom.id);
     const isHovered = hoveredAtom === atom.id && selectedTool === 'select';
     const isDraggedAtom = draggedAtom === atom.id;
-    
+    const isHoveredForErase = selectedTool === 'eraser' && hoveredAtom === atom.id;
     return (
       <g key={atom.id}>
-        {/* Selection/hover ring */}
-        {(isSelected || isHovered || isDraggedAtom) && (
+        {/* Selection/hover/eraser ring */}
+        {(isSelected || isHovered || isDraggedAtom || isHoveredForErase) && (
           <circle
             cx={atom.position.x}
             cy={atom.position.y}
             r={ATOM_RADIUS + 4}
             fill="none"
-            stroke={isSelected || isDraggedAtom ? "#3b82f6" : "#93c5fd"}
-            strokeWidth="2"
+            stroke={isHoveredForErase ? "#ef4444" : (isSelected || isDraggedAtom ? "#3b82f6" : "#93c5fd")}
+            strokeWidth={isHoveredForErase ? 3 : 2}
             strokeDasharray={isHovered && !isSelected ? "4,2" : undefined}
             opacity="0.8"
           />
@@ -892,6 +930,7 @@ export function ChemCanvas({
           setDraggedAtom(null);
           setIsDragging(false);
           setHoveredAtom(null);
+          setHoveredBond(null);
           setIsPanning(false);
           setPanStart(null);
           setSelectBox(null);
