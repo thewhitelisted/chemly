@@ -98,13 +98,63 @@ export class HydrogenManager {
 
     const newHydrogens: Atom[] = [];
     const newBonds: Bond[] = [];
-
-    // Position hydrogens around the atom
-    const angleStep = (2 * Math.PI) / Math.max(neededHydrogens, 3);
     const hydrogenDistance = 30;
 
+    // Find angles of all existing bonds (to non-hydrogen atoms)
+    const bondedAtoms = graph.bonds
+      .filter(bond => (bond.sourceAtomId === atom.id || bond.targetAtomId === atom.id))
+      .map(bond => {
+        const otherAtomId = bond.sourceAtomId === atom.id ? bond.targetAtomId : bond.sourceAtomId;
+        return graph.atoms.find(a => a.id === otherAtomId);
+      })
+      .filter(a => a && a.element !== 'H') as Atom[];
+    const bondAngles = bondedAtoms.map(a => Math.atan2(a.position.y - atom.position.y, a.position.x - atom.position.x));
+    bondAngles.sort((a, b) => a - b);
+
+    let hydrogenAngles: number[] = [];
+    if (bondAngles.length === 0) {
+      // No bonds: space hydrogens evenly around atom
+      for (let i = 0; i < neededHydrogens; i++) {
+        hydrogenAngles.push((2 * Math.PI * i) / neededHydrogens);
+      }
+    } else {
+      // Find all angular gaps between bonds
+      const allAngles = [...bondAngles, bondAngles[0] + 2 * Math.PI];
+      let gaps: { start: number; end: number; size: number }[] = [];
+      for (let i = 0; i < bondAngles.length; i++) {
+        const start = bondAngles[i];
+        const end = allAngles[i + 1];
+        let size = end - start;
+        if (size < 0) size += 2 * Math.PI;
+        gaps.push({ start, end, size });
+      }
+      // Sort gaps by size descending
+      gaps.sort((a, b) => b.size - a.size);
+
+      // Distribute hydrogens as evenly as possible among the gaps
+      // First, assign at least one hydrogen to each gap, then distribute the rest to the largest gaps
+      const hydrogensPerGap = new Array(gaps.length).fill(0);
+      for (let i = 0; i < neededHydrogens; i++) {
+        hydrogensPerGap[i % gaps.length]++;
+      }
+      // For each gap, place hydrogens evenly within the gap
+      let hydrogenIdx = 0;
+      for (let gapIdx = 0; gapIdx < gaps.length; gapIdx++) {
+        const gap = gaps[gapIdx];
+        const count = hydrogensPerGap[gapIdx];
+        for (let j = 0; j < count; j++) {
+          // Evenly space within the gap (not at the very edge)
+          const angle = gap.start + ((j + 1) / (count + 1)) * gap.size;
+          let normAngle = angle;
+          if (normAngle < 0) normAngle += 2 * Math.PI;
+          if (normAngle >= 2 * Math.PI) normAngle -= 2 * Math.PI;
+          hydrogenAngles[hydrogenIdx++] = normAngle;
+        }
+      }
+    }
+
     for (let i = 0; i < neededHydrogens; i++) {
-      const angle = i * angleStep;
+      const angle = hydrogenAngles[i];
       const hydrogenPosition = {
         x: atom.position.x + Math.cos(angle) * hydrogenDistance,
         y: atom.position.y + Math.sin(angle) * hydrogenDistance,
