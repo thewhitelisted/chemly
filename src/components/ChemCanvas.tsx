@@ -51,6 +51,8 @@ export function ChemCanvas({
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState<Point | null>(null);
   const [selectedAtoms, setSelectedAtoms] = useState<string[]>([]);
+  const [pendingBoxStart, setPendingBoxStart] = useState<Point | null>(null);
+  const [isMouseDown, setIsMouseDown] = useState(false);
   
   // Track if we're currently updating hydrogens to prevent infinite loops
   const isUpdatingHydrogens = useRef(false);
@@ -93,8 +95,14 @@ export function ChemCanvas({
     isUpdatingHydrogens.current = true;
     
     // Use HydrogenManager to fill all valences
-    const updatedMolecule = HydrogenManager.fillAllValences(molecule);
-    
+    let updatedMolecule = HydrogenManager.fillAllValences(molecule);
+    // Clear implicitHydrogens for all non-hydrogen atoms
+    updatedMolecule = {
+      ...updatedMolecule,
+      atoms: updatedMolecule.atoms.map(atom =>
+        atom.element === 'H' ? atom : { ...atom, implicitHydrogens: 0 }
+      ),
+    };
     // Check if anything changed
     const hasChanges = updatedMolecule.atoms.length !== molecule.atoms.length || 
                       updatedMolecule.bonds.length !== molecule.bonds.length;
@@ -248,8 +256,9 @@ export function ChemCanvas({
           // Create molecule with updated bond
           const moleculeWithUpdatedBond = { ...molecule, bonds: updatedBonds };
           
-          // Update hydrogens for both atoms affected by the bond type change
-          const finalMolecule = HydrogenManager.onBondTypeChanged(clickedBond, moleculeWithUpdatedBond);
+          // Pass the updated bond to HydrogenManager
+          const updatedBond = { ...clickedBond, type: newBondType };
+          const finalMolecule = HydrogenManager.onBondTypeChanged(updatedBond, moleculeWithUpdatedBond);
           onMoleculeChange(finalMolecule);
         } else {
           // Clear selection if clicking on empty space
@@ -314,9 +323,13 @@ export function ChemCanvas({
       }
       // If nothing found, do nothing
     }
-  }, [molecule, selectedTool, selectedElement, getCanvasPoint, onMoleculeChange, isDragging]);
+  }, [molecule, selectedTool, selectedElement, getCanvasPoint, onMoleculeChange, isDragging, recentDragEnd]);
 
   const handleMouseDown = useCallback((event: React.MouseEvent) => {
+    if (recentDragEnd) {
+      return;
+    }
+    setIsMouseDown(true);
     event.preventDefault();
     event.stopPropagation();
     const rawPoint = getCanvasPoint(event.clientX, event.clientY);
@@ -340,6 +353,7 @@ export function ChemCanvas({
         // Only allow individual selection if no dragStart (i.e., not starting a selection box)
         if (!dragStart) {
           if (selectedAtoms.length > 1 && selectedAtoms.includes(atom.id)) {
+            // Clicked atom is already in selection: start group drag, preserve selection
             setDraggedAtom(atom.id);
             setIsDragging(true);
             setGroupDragStart({
@@ -348,7 +362,16 @@ export function ChemCanvas({
                 molecule.atoms.filter(a => selectedAtoms.includes(a.id)).map(a => [a.id, { ...a.position }])
               )
             });
+          } else if (selectedAtoms.length === 1 && selectedAtoms[0] === atom.id) {
+            // Only one atom selected and it's the one clicked: preserve selection, start drag
+            setDraggedAtom(atom.id);
+            setIsDragging(true);
+            setGroupDragStart({
+              mouse: snappedPoint,
+              atomPositions: { [atom.id]: { ...atom.position } }
+            });
           } else {
+            // Clicked atom is not in selection: select only this atom and start drag
             setSelectedAtoms([atom.id]);
             setDraggedAtom(atom.id);
             setIsDragging(true);
@@ -360,12 +383,11 @@ export function ChemCanvas({
         }
         // If dragStart is set, do nothing (we're starting a selection box)
       } else {
-        // Only start select box if mouse move exceeds threshold
-        setDragStart(rawPoint);
+        // Only set pendingBoxStart, don't start dragStart yet
+        setPendingBoxStart(rawPoint);
         setSelectBox(null);
         setIsDragging(false);
         setDraggedAtom(null);
-        setSelectedAtoms([]);
         setGroupDragStart(null);
       }
     } else if (selectedTool === 'atom') {
@@ -378,7 +400,7 @@ export function ChemCanvas({
         setIsDragging(false);
       }
     }
-  }, [selectedTool, selectedAtom, molecule.atoms, getCanvasPoint, selectedAtoms]);
+  }, [selectedTool, selectedAtom, molecule.atoms, getCanvasPoint, selectedAtoms, dragStart, recentDragEnd]);
 
   const handleMouseMove = useCallback((event: React.MouseEvent) => {
     const rawPoint = getCanvasPoint(event.clientX, event.clientY);
@@ -402,6 +424,20 @@ export function ChemCanvas({
         setPanStart(currentScreenPoint);
       }
       return;
+    }
+
+    // Only start select box if mouse has moved enough from pendingBoxStart and mouse is down
+    if (selectedTool === 'select' && isMouseDown && pendingBoxStart && !dragStart) {
+      const dragDistance = Math.sqrt(
+        Math.pow(rawPoint.x - pendingBoxStart.x, 2) + Math.pow(rawPoint.y - pendingBoxStart.y, 2)
+      );
+      if (dragDistance > 2) {
+        setDragStart(pendingBoxStart);
+        setIsDragging(true);
+        setSelectBox({ start: pendingBoxStart, end: rawPoint });
+        setPendingBoxStart(null);
+        return;
+      }
     }
 
     // Update hovered atom for cursor changes (only when not dragging, not panning, and not in selection box drag)
@@ -450,9 +486,16 @@ export function ChemCanvas({
         setPreviewBond({ start: dragStart, end: snappedPoint });
       }
     }
-  }, [selectedTool, draggedAtom, dragStart, isDragging, selectedAtom, isPanning, panStart, canvasOffset, scale, getCanvasPoint, molecule, onMoleculeChange, onCanvasTransformChange, groupDragStart, selectedAtoms, selectBox]);
+  }, [selectedTool, draggedAtom, dragStart, isDragging, selectedAtom, isPanning, panStart, canvasOffset, scale, getCanvasPoint, molecule, onMoleculeChange, onCanvasTransformChange, groupDragStart, selectedAtoms, selectBox, pendingBoxStart, isMouseDown]);
 
   const handleMouseUp = useCallback((event: React.MouseEvent) => {
+    setIsMouseDown(false);
+    // If a selection box was never started, clear pendingBoxStart and dragStart
+    if (pendingBoxStart && !dragStart) {
+      setPendingBoxStart(null);
+      setDragStart(null);
+      setSelectBox(null);
+    }
     console.log('MouseUp:', { draggedAtom, isDragging, selectedAtom, isPanning, selectedTool });
     
     if (selectedTool === 'pan' && isPanning) {
@@ -478,6 +521,7 @@ export function ChemCanvas({
             .map(atom => atom.id);
           setSelectedAtoms(selectedAtomIds);
         } else {
+          // Only clear selection if the box was too small (i.e., a click, not a drag)
           setSelectedAtoms([]);
         }
         setSelectBox(null);
@@ -489,7 +533,8 @@ export function ChemCanvas({
         setTimeout(() => setRecentDragEnd(false), 100);
         return;
       }
-      if (!selectBox && !dragStart) {
+      // Only clear selection if this was a click on empty space (not a drag or group move)
+      if (!selectBox && !dragStart && !draggedAtom && !isDragging) {
         const rawPoint = getCanvasPoint(event.clientX, event.clientY);
         const snappedPoint = snapToGrid(rawPoint);
         const atom = findAtomAtPoint(rawPoint) || findAtomAtPoint(snappedPoint);
@@ -503,15 +548,8 @@ export function ChemCanvas({
         setGroupDragStart(null);
         return;
       }
-      // If dragStart is set (from a box drag), always clear drag state and selection, never select an atom
-      if (dragStart) {
-        setSelectedAtoms([]);
-        setDragStart(null);
-        setIsDragging(false);
-        setDraggedAtom(null);
-        setGroupDragStart(null);
-        return;
-      }
+      // Do NOT clear selection after a group move (dragging selected atoms)
+      // Remove the block that clears selection on dragStart alone
     }
     if (selectedTool === 'select' && draggedAtom && isDragging) {
       // End move mode drag
@@ -520,6 +558,9 @@ export function ChemCanvas({
       setDragStart(null);
       setPreviewBond(null);
       setGroupDragStart(null);
+      // Selection is preserved
+      setRecentDragEnd(true);
+      setTimeout(() => setRecentDragEnd(false), 100);
     } else if (selectedTool === 'atom' && draggedAtom && dragStart) {
       // Create new atom with bond from the dragged atom
       const rawPoint = getCanvasPoint(event.clientX, event.clientY);
@@ -592,7 +633,9 @@ export function ChemCanvas({
       setDragStart(null);
       setPreviewBond(null);
     }
-  }, [selectedTool, draggedAtom, isDragging, dragStart, isPanning, molecule, selectedElement, getCanvasPoint, onMoleculeChange, selectBox]);
+    // Always clear pendingBoxStart on mouse up
+    setPendingBoxStart(null);
+  }, [selectedTool, draggedAtom, isDragging, dragStart, isPanning, molecule, selectedElement, getCanvasPoint, onMoleculeChange, selectBox, recentDragEnd, pendingBoxStart]);
 
   // Handle wheel zoom
   const handleWheel = useCallback((event: React.WheelEvent) => {

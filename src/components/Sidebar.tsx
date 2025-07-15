@@ -21,6 +21,7 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
     isValid: true, 
     warnings: [] 
   });
+  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Update SMILES when molecule changes
   useEffect(() => {
@@ -69,12 +70,12 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
       if (result.success && result.graph) {
         onMoleculeChange(result.graph);
         setSmilesInput(''); // Clear input after successful import
+        setNotification({ type: 'success', message: 'SMILES imported successfully!' });
       } else {
-        alert(`Failed to import SMILES: ${result.error}`);
+        setNotification({ type: 'error', message: `Failed to import SMILES: ${result.error}` });
       }
     } catch (error) {
-      console.error('Failed to import SMILES:', error);
-      alert('Failed to import SMILES structure');
+      setNotification({ type: 'error', message: 'Failed to import SMILES structure' });
     } finally {
       setIsImporting(false);
     }
@@ -85,7 +86,7 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
     
     // Placeholder for AI prompt handling
     console.log('AI Prompt:', promptInput);
-    alert(`AI prompt received: "${promptInput}"\n\nThis feature will be implemented in the next phase.`);
+    setNotification({ type: 'success', message: `AI prompt received: "${promptInput}" (feature coming soon)` });
     setPromptInput('');
   };
 
@@ -106,6 +107,13 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
       default: return <FileText className="w-4 h-4" />;
     }
   };
+
+  useEffect(() => {
+    if (notification) {
+      const timer = setTimeout(() => setNotification(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [notification]);
 
   return (
     <div className="w-80 bg-white border-l border-gray-200 p-4 flex flex-col space-y-6 overflow-y-auto">
@@ -247,6 +255,12 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
           )}
         </div>
       </div>
+      {notification && (
+        <div className={`fixed bottom-4 right-4 z-50 px-4 py-2 rounded shadow-lg text-white ${notification.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}
+          style={{ minWidth: 200, textAlign: 'center' }}>
+          {notification.message}
+        </div>
+      )}
     </div>
   );
 }
