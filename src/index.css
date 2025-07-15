@@ -4,11 +4,24 @@
 
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  --bg-color: #fafafa;
+  --text-color: #222;
 }
 
 body {
   margin: 0;
   padding: 0;
   min-height: 100vh;
-  background-color: #fafafa;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+}
+
+.dark {
+  --bg-color: #18181b;
+  --text-color: #e5e7eb;
+}
+
+body.dark {
+  background-color: var(--bg-color);
+  color: var(--text-color);
 }

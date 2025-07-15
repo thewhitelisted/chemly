@@ -16,7 +16,20 @@ interface ChemCanvasProps {
 
 const ATOM_RADIUS = 15;
 
-const elementColors: Record<ElementSymbol, string> = {
+// Helper hook to detect dark mode
+function useDarkMode() {
+  const [dark, setDark] = useState(() => document.body.classList.contains('dark'));
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setDark(document.body.classList.contains('dark'));
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+  return dark;
+}
+
+const lightElementColors: Record<ElementSymbol, string> = {
   C: '#1f2937', // gray-800
   O: '#ef4444', // red-500  
   N: '#3b82f6', // blue-500
@@ -28,6 +41,34 @@ const elementColors: Record<ElementSymbol, string> = {
   I: '#6b21a8', // purple-800
   H: '#d1d5db', // gray-300
 };
+const darkElementColors: Record<ElementSymbol, string> = {
+  C: '#27272a', // zinc-800 (was H)
+  O: '#fca5a5', // red-300
+  N: '#93c5fd', // blue-300
+  P: '#fdba74', // orange-300
+  S: '#fde68a', // yellow-200
+  F: '#6ee7b7', // green-300
+  Cl: '#bbf7d0', // green-200
+  Br: '#fca5a5', // red-300
+  I: '#ddd6fe', // purple-200
+  H: '#fff', // white for hydrogen in dark mode
+};
+
+// Helper to determine if a hex color is light
+function isColorLight(hex: string) {
+  // Remove # if present
+  hex = hex.replace('#', '');
+  // Convert 3-digit hex to 6-digit
+  if (hex.length === 3) {
+    hex = hex.split('').map(x => x + x).join('');
+  }
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  // Perceived luminance formula
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6;
+}
 
 export function ChemCanvas({
   molecule,
@@ -38,6 +79,8 @@ export function ChemCanvas({
   onMoleculeChange,
   onCanvasTransformChange,
 }: ChemCanvasProps) {
+  const darkMode = useDarkMode();
+  const elementColors = darkMode ? darkElementColors : lightElementColors;
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragStart, setDragStart] = useState<Point | null>(null);
   const [selectBox, setSelectBox] = useState<{ start: Point; end: Point } | null>(null);
@@ -872,6 +915,8 @@ export function ChemCanvas({
     const isHovered = hoveredAtom === atom.id && selectedTool === 'select';
     const isDraggedAtom = draggedAtom === atom.id;
     const isHoveredForErase = selectedTool === 'eraser' && hoveredAtom === atom.id;
+    // Set text color: black for light backgrounds, white for dark backgrounds
+    const textColor = isColorLight(color) ? '#18181b' : 'white';
     return (
       <g key={atom.id}>
         {/* Selection/hover/eraser ring */}
@@ -902,7 +947,7 @@ export function ChemCanvas({
           dominantBaseline="middle"
           fontSize="12"
           fontWeight="bold"
-          fill="white"
+          fill={textColor}
         >
           {atom.element}
         </text>
@@ -911,7 +956,7 @@ export function ChemCanvas({
   };
 
   return (
-    <div className="flex-1 bg-gradient-to-br from-gray-50 to-white relative overflow-hidden">
+    <div className={darkMode ? "flex-1 bg-gradient-to-br from-zinc-900 to-zinc-800 relative overflow-hidden" : "flex-1 bg-gradient-to-br from-gray-50 to-white relative overflow-hidden"}>
       <svg
         ref={svgRef}
         className="w-full h-full"

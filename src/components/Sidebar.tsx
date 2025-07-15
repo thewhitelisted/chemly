@@ -92,10 +92,10 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
-      case 'error': return 'text-red-600 bg-red-50 border-red-200';
-      case 'warning': return 'text-yellow-600 bg-yellow-50 border-yellow-200';
-      case 'info': return 'text-blue-600 bg-blue-50 border-blue-200';
-      default: return 'text-gray-600 bg-gray-50 border-gray-200';
+      case 'error': return 'text-red-600 bg-red-50 border border-red-200 dark:text-red-200 dark:bg-red-900 dark:border-red-800';
+      case 'warning': return 'text-orange-700 bg-orange-50 border border-orange-200 dark:text-orange-200 dark:bg-orange-900 dark:border-orange-800';
+      case 'info': return 'text-blue-600 bg-blue-50 border border-blue-200 dark:text-blue-200 dark:bg-blue-900 dark:border-blue-800';
+      default: return 'text-gray-600 bg-gray-50 border border-gray-200 dark:text-gray-200 dark:bg-zinc-800 dark:border-zinc-700';
     }
   };
 
@@ -116,25 +116,25 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
   }, [notification]);
 
   return (
-    <div className="w-80 bg-white border-l border-gray-200 p-4 flex flex-col space-y-6 overflow-y-auto">
+    <div className="w-80 bg-white dark:bg-zinc-900 border-l border-gray-200 dark:border-zinc-800 p-4 flex flex-col space-y-6 overflow-y-auto transition-colors">
       {/* AI Prompt Box */}
       <div className="space-y-2">
         <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
           <Lightbulb className="w-4 h-4" />
-          AI Structure Generation
+          <span className="dark:text-gray-100">AI Structure Generation</span>
         </h3>
         <div className="space-y-2">
           <textarea
             value={promptInput}
             onChange={(e) => setPromptInput(e.target.value)}
             placeholder="Describe the molecule you want to draw..."
-            className="w-full p-3 text-sm border border-gray-300 rounded-md resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full p-3 text-sm border border-gray-300 dark:border-zinc-700 rounded-md resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-zinc-800 text-gray-900 dark:text-gray-100"
             rows={3}
           />
           <button
             onClick={handlePromptSubmit}
             disabled={!promptInput.trim()}
-            className="w-full px-3 py-2 text-sm font-medium text-white bg-purple-600 rounded-md hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+            className="w-full px-3 py-2 text-sm font-medium text-white bg-purple-600 rounded-md hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed dark:bg-purple-700 dark:hover:bg-purple-800 disabled:dark:bg-zinc-700 disabled:dark:text-gray-400"
           >
             Generate Structure
           </button>
@@ -145,7 +145,7 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
       <div className="space-y-2">
         <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
           <Upload className="w-4 h-4" />
-          Import SMILES
+          <span className="dark:text-gray-100">Import SMILES</span>
         </h3>
         <div className="space-y-2">
           <input
@@ -153,13 +153,13 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
             value={smilesInput}
             onChange={(e) => setSmilesInput(e.target.value)}
             placeholder="Enter SMILES string..."
-            className="w-full p-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full p-2 text-sm border border-gray-300 dark:border-zinc-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-zinc-800 text-gray-900 dark:text-gray-100"
             onKeyPress={(e) => e.key === 'Enter' && handleSmilesImport()}
           />
           <button
             onClick={handleSmilesImport}
             disabled={!smilesInput.trim() || isImporting}
-            className="w-full px-3 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+            className="w-full px-3 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed dark:bg-green-700 dark:hover:bg-green-800 disabled:dark:bg-zinc-700 disabled:dark:text-gray-400"
           >
             {isImporting ? 'Importing...' : 'Import Structure'}
           </button>
@@ -170,18 +170,18 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
       <div className="space-y-2">
         <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
           <Download className="w-4 h-4" />
-          Export SMILES
+          <span className="dark:text-gray-100">Export SMILES</span>
         </h3>
         <div className="space-y-2">
-          <div className="p-3 bg-gray-50 border border-gray-200 rounded-md">
-            <code className="text-sm text-gray-700 font-mono break-all">
+          <div className="p-3 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-md">
+            <code className="text-sm text-gray-700 dark:text-gray-100 font-mono break-all bg-transparent">
               {isExporting ? 'Generating...' : currentSmiles || 'No structure'}
             </code>
           </div>
           <button
             onClick={handleCopySmiles}
             disabled={!currentSmiles || isExporting}
-            className="w-full px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2 dark:bg-blue-700 dark:hover:bg-blue-800"
           >
             <Copy className="w-4 h-4" />
             {copied ? 'Copied!' : 'Copy SMILES'}
@@ -193,15 +193,15 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
       <div className="space-y-2">
         <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
           <AlertTriangle className="w-4 h-4" />
-          Structure Validation
+          <span className="dark:text-gray-100">Structure Validation</span>
         </h3>
         <div className="space-y-2">
           <div className={`p-2 rounded-md text-sm ${
             validation.isValid 
-              ? 'text-green-700 bg-green-50 border border-green-200'
-              : 'text-orange-700 bg-orange-50 border border-orange-200'
+              ? 'text-green-700 bg-green-50 border border-green-200 dark:text-green-200 dark:bg-green-900 dark:border-green-800'
+              : 'text-orange-700 bg-orange-50 border border-orange-200 dark:text-orange-200 dark:bg-orange-900 dark:border-orange-800'
           }`}>
-            {validation.isValid ? '✓ Structure is valid' : `⚠ ${validation.warnings.length} issue(s) found`}
+            {validation.isValid ? '\u2713 Structure is valid' : `\u26a0 ${validation.warnings.length} issue(s) found`}
           </div>
           
           {validation.warnings.length > 0 && (
@@ -234,20 +234,20 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
       <div className="space-y-2">
         <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
           <FileText className="w-4 h-4" />
-          Molecule Info
+          <span className="dark:text-gray-100">Molecule Info</span>
         </h3>
-        <div className="p-3 bg-gray-50 border border-gray-200 rounded-md space-y-1 text-sm">
+        <div className="p-3 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-md space-y-1 text-sm">
           <div className="flex justify-between">
-            <span className="text-gray-600">Atoms:</span>
-            <span className="font-medium">{molecule.atoms.length}</span>
+            <span className="text-gray-600 dark:text-gray-300">Atoms:</span>
+            <span className="font-medium dark:text-gray-100">{molecule.atoms.length}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-600">Bonds:</span>
-            <span className="font-medium">{molecule.bonds.length}</span>
+            <span className="text-gray-600 dark:text-gray-300">Bonds:</span>
+            <span className="font-medium dark:text-gray-100">{molecule.bonds.length}</span>
           </div>
           {molecule.atoms.length > 0 && (
             <div className="flex justify-between">
-              <span className="text-gray-600">Elements:</span>
+              <span className="text-gray-600 dark:text-gray-300">Elements:</span>
               <span className="font-medium">
                 {Array.from(new Set(molecule.atoms.map(a => a.element))).join(', ')}
               </span>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ChemCanvas } from './components/ChemCanvas';
 import { Toolbar } from './components/Toolbar';
 import { Sidebar } from './components/Sidebar';
@@ -18,6 +18,24 @@ function App() {
     canvasOffset: { x: 0, y: 0 },
     scale: 1
   });
+
+  // Dark mode state
+  const [darkMode, setDarkMode] = useState(() => {
+    const stored = localStorage.getItem('theme');
+    if (stored) return stored === 'dark';
+    // Default to system preference
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+
+  useEffect(() => {
+    if (darkMode) {
+      document.body.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.body.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [darkMode]);
 
   const updateDrawingState = (updates: Partial<DrawingState>) => {
     setDrawingState(prev => ({ ...prev, ...updates }));
@@ -42,13 +60,15 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen">
+    <div className="flex h-screen bg-white dark:bg-zinc-900 transition-colors">
       <Toolbar
         selectedElement={drawingState.selectedElement}
         selectedTool={drawingState.selectedTool}
         onElementSelect={el => updateDrawingState({ selectedElement: el, selectedTool: 'atom' })}
         onToolSelect={tool => updateDrawingState({ selectedTool: tool })}
         onCleanStructure={handleCleanStructure}
+        darkMode={darkMode}
+        onToggleDarkMode={() => setDarkMode(dm => !dm)}
       />
       <ChemCanvas
         molecule={drawingState.molecule}
