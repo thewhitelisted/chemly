@@ -23,7 +23,7 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
     warnings: [] 
   });
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [moleculeName, setMoleculeName] = useState('');
+  const [moleculeName, setMoleculeName] = useState<string | string[]>('');
   const [isNaming, setIsNaming] = useState(false);
 
   // Update SMILES when molecule changes
@@ -54,9 +54,9 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
     setValidation(newValidation);
   }, [molecule]);
 
-  // Update molecule name when molecule or currentSmiles changes
+  // Update molecule name(s) when molecule or currentSmiles changes
   useEffect(() => {
-    const fetchName = async () => {
+    const fetchNames = async () => {
       setIsNaming(true);
       try {
         if (!currentSmiles) {
@@ -64,10 +64,28 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
           setIsNaming(false);
           return;
         }
-        const response = await fetch(`https://cactus.nci.nih.gov/chemical/structure/${encodeURIComponent(currentSmiles)}/iupac_name`);
-        if (!response.ok) throw new Error('CACTUS request failed');
-        const name = await response.text();
-        setMoleculeName(name.trim() || 'No name found');
+        const fragments = currentSmiles.split('.').map(f => f.trim()).filter(Boolean);
+        if (fragments.length === 1) {
+          // Single structure
+          const response = await fetch(`https://cactus.nci.nih.gov/chemical/structure/${encodeURIComponent(fragments[0])}/iupac_name`);
+          if (!response.ok) throw new Error('CACTUS request failed');
+          const name = await response.text();
+          setMoleculeName(name.trim() || 'No name found');
+        } else {
+          // Multiple structures
+          const names: string[] = [];
+          for (const frag of fragments) {
+            try {
+              const response = await fetch(`https://cactus.nci.nih.gov/chemical/structure/${encodeURIComponent(frag)}/iupac_name`);
+              if (!response.ok) throw new Error('CACTUS request failed');
+              const name = await response.text();
+              names.push(name.trim() || 'No name found');
+            } catch {
+              names.push('No name found');
+            }
+          }
+          setMoleculeName(names);
+        }
       } catch (e) {
         setMoleculeName('No name found');
       } finally {
@@ -75,7 +93,7 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
       }
     };
     if (currentSmiles) {
-      fetchName();
+      fetchNames();
     } else {
       setMoleculeName('');
     }
@@ -219,16 +237,24 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
         </div>
       </div>
 
-      {/* Molecule Name (OpenChemLib) */}
+      {/* Molecule Name (CACTUS) */}
       <div className="space-y-2">
         <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
           <FileText className="w-4 h-4" />
-          <span className="dark:text-gray-100">Molecule Name</span>
+          <span className="dark:text-gray-100">Molecule Name{Array.isArray(moleculeName) && moleculeName.length > 1 ? 's' : ''}</span>
         </h3>
         <div className="p-3 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-md">
-          <span className="text-sm text-gray-700 dark:text-gray-100 font-mono break-all bg-transparent">
-            {isNaming ? 'Generating...' : moleculeName || 'No name found'}
-          </span>
+          {isNaming ? (
+            <span className="text-sm text-gray-700 dark:text-gray-100 font-mono break-all bg-transparent">Generating...</span>
+          ) : Array.isArray(moleculeName) ? (
+            <ul className="list-disc pl-5">
+              {moleculeName.map((name, idx) => (
+                <li key={idx} className="text-sm text-gray-700 dark:text-gray-100 font-mono break-all bg-transparent">{name}</li>
+              ))}
+            </ul>
+          ) : (
+            <span className="text-sm text-gray-700 dark:text-gray-100 font-mono break-all bg-transparent">{moleculeName || 'No name found'}</span>
+          )}
         </div>
       </div>
 
