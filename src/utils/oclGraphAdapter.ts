@@ -170,46 +170,6 @@ export function graphToOclMolecule(graph: MoleculeGraph): OCL.Molecule {
   return mol;
 }
 
-// Generate 2D coordinates for a MoleculeGraph using recursive placement
-export function generate2DCoordinatesForGraph(graph: MoleculeGraph): MoleculeGraph {
-  const STANDARD_BOND_LENGTH = 40;
-  const placed: Record<string, { x: number, y: number }> = {};
-  const visited = new Set<string>();
-  if (graph.atoms.length === 0) return graph;
-
-  // Start with the first atom at the center
-  const root = graph.atoms[0];
-  placed[root.id] = { x: 400, y: 300 };
-
-  function placeNeighbors(atomId: string, parentAngle: number | null) {
-    const atom = graph.atoms.find(a => a.id === atomId)!;
-    visited.add(atomId);
-    // Find neighbors (excluding parent)
-    const neighbors = graph.bonds
-      .filter(b => b.sourceAtomId === atomId || b.targetAtomId === atomId)
-      .map(b => b.sourceAtomId === atomId ? b.targetAtomId : b.sourceAtomId)
-      .filter(nid => !visited.has(nid));
-    // Determine angles for neighbors
-    const angleStep = (2 * Math.PI) / Math.max(neighbors.length, 1);
-    let startAngle = parentAngle !== null ? parentAngle + Math.PI : 0;
-    neighbors.forEach((neighborId, i) => {
-      const angle = startAngle + i * angleStep;
-      placed[neighborId] = {
-        x: placed[atomId].x + Math.cos(angle) * STANDARD_BOND_LENGTH,
-        y: placed[atomId].y + Math.sin(angle) * STANDARD_BOND_LENGTH,
-      };
-      placeNeighbors(neighborId, angle);
-    });
-  }
-  placeNeighbors(root.id, null);
-  // Update atom positions in the graph
-  const newAtoms = graph.atoms.map(atom => ({
-    ...atom,
-    position: placed[atom.id] || { x: 0, y: 0 },
-  }));
-  return { ...graph, atoms: newAtoms };
-}
-
 // Returns the ids of hydrogen atoms attached to a given atom
 export function getAttachedHydrogens(graph: MoleculeGraph, atomId: string): string[] {
   const atom = graph.atoms.find(a => a.id === atomId);

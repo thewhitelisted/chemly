@@ -112,7 +112,35 @@ export class HydrogenManager {
     bondAngles.sort((a, b) => a - b);
 
     let hydrogenAngles: number[] = [];
-    if (bondAngles.length === 0) {
+    if (bondedAtoms.length === 2) {
+      // Place hydrogens in the largest angular gap between the two bonds, spaced evenly
+      const angle1 = bondAngles[0];
+      const angle2 = bondAngles[1];
+      // Compute both gaps (wrap around 2π)
+      let a1 = angle1;
+      let a2 = angle2;
+      if (a2 < a1) [a1, a2] = [a2, a1];
+      const gap1 = a2 - a1;
+      const gap2 = 2 * Math.PI - gap1;
+      let gapStart, gapSize;
+      if (gap1 > gap2) {
+        gapStart = a1;
+        gapSize = gap1;
+      } else {
+        gapStart = a2;
+        gapSize = gap2;
+      }
+      // Debug logging
+      console.log(`HydrogenManager: atom ${atom.id} (${atom.element})`);
+      console.log(`  Bond angles: ${angle1.toFixed(2)}, ${angle2.toFixed(2)}`);
+      console.log(`  Gaps: gap1=${gap1.toFixed(2)}, gap2=${gap2.toFixed(2)}`);
+      console.log(`  Chosen gap: start=${gapStart.toFixed(2)}, size=${gapSize.toFixed(2)}`);
+      for (let i = 0; i < neededHydrogens; i++) {
+        const hAngle = gapStart + ((i + 1) / (neededHydrogens + 1)) * gapSize;
+        hydrogenAngles.push(hAngle);
+        console.log(`  Hydrogen ${i + 1}: angle=${hAngle.toFixed(2)}`);
+      }
+    } else if (bondAngles.length === 0) {
       // No bonds: space hydrogens evenly around atom
       for (let i = 0; i < neededHydrogens; i++) {
         hydrogenAngles.push((2 * Math.PI * i) / neededHydrogens);
@@ -130,9 +158,7 @@ export class HydrogenManager {
       }
       // Sort gaps by size descending
       gaps.sort((a, b) => b.size - a.size);
-
       // Distribute hydrogens as evenly as possible among the gaps
-      // First, assign at least one hydrogen to each gap, then distribute the rest to the largest gaps
       const hydrogensPerGap = new Array(gaps.length).fill(0);
       for (let i = 0; i < neededHydrogens; i++) {
         hydrogensPerGap[i % gaps.length]++;
