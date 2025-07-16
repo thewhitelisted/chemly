@@ -54,41 +54,44 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
     setValidation(newValidation);
   }, [molecule]);
 
-  // Update molecule name(s) when molecule or currentSmiles changes
+  // Debounced update of molecule name(s) when currentSmiles changes
   useEffect(() => {
-    const fetchNames = async () => {
-      setIsNaming(true);
-      try {
-        if (!currentSmiles) {
-          setMoleculeName('');
-          setIsNaming(false);
-          return;
-        }
-        const fragments = currentSmiles.split('.').map(f => f.trim()).filter(Boolean);
-        const body = { smiles: fragments.length === 1 ? fragments[0] : fragments };
-        const response = await fetch('/api/name', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        if (!response.ok) throw new Error('Naming API request failed');
-        const data = await response.json();
-        if (Array.isArray(data.names)) {
-          setMoleculeName(fragments.length === 1 ? data.names[0] : data.names);
-        } else {
-          setMoleculeName('No name found');
-        }
-      } catch (e) {
-        setMoleculeName('No name found');
-      } finally {
-        setIsNaming(false);
-      }
-    };
-    if (currentSmiles) {
-      fetchNames();
-    } else {
+    if (!currentSmiles) {
       setMoleculeName('');
+      return;
     }
+
+    setIsNaming(true);
+    const handler = setTimeout(() => {
+      const fetchNames = async () => {
+        try {
+          const fragments = currentSmiles.split('.').map(f => f.trim()).filter(Boolean);
+          const body = { smiles: fragments.length === 1 ? fragments[0] : fragments };
+          const response = await fetch('/api/name', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          if (!response.ok) throw new Error('Naming API request failed');
+          const data = await response.json();
+          if (Array.isArray(data.names)) {
+            setMoleculeName(fragments.length === 1 ? data.names[0] : data.names);
+          } else {
+            setMoleculeName('No name found');
+          }
+        } catch (e) {
+          setMoleculeName('No name found');
+        } finally {
+          setIsNaming(false);
+        }
+      };
+      fetchNames();
+    }, 5000); // 5 seconds
+
+    return () => {
+      clearTimeout(handler);
+      setIsNaming(false);
+    };
   }, [currentSmiles]);
 
   const handleCopySmiles = async () => {
