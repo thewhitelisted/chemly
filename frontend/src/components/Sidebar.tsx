@@ -65,26 +65,18 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
           return;
         }
         const fragments = currentSmiles.split('.').map(f => f.trim()).filter(Boolean);
-        if (fragments.length === 1) {
-          // Single structure
-          const response = await fetch(`https://cactus.nci.nih.gov/chemical/structure/${encodeURIComponent(fragments[0])}/iupac_name`);
-          if (!response.ok) throw new Error('CACTUS request failed');
-          const name = await response.text();
-          setMoleculeName(name.trim() || 'No name found');
+        const body = { smiles: fragments.length === 1 ? fragments[0] : fragments };
+        const response = await fetch('/api/name', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!response.ok) throw new Error('Naming API request failed');
+        const data = await response.json();
+        if (Array.isArray(data.names)) {
+          setMoleculeName(fragments.length === 1 ? data.names[0] : data.names);
         } else {
-          // Multiple structures
-          const names: string[] = [];
-          for (const frag of fragments) {
-            try {
-              const response = await fetch(`https://cactus.nci.nih.gov/chemical/structure/${encodeURIComponent(frag)}/iupac_name`);
-              if (!response.ok) throw new Error('CACTUS request failed');
-              const name = await response.text();
-              names.push(name.trim() || 'No name found');
-            } catch {
-              names.push('No name found');
-            }
-          }
-          setMoleculeName(names);
+          setMoleculeName('No name found');
         }
       } catch (e) {
         setMoleculeName('No name found');

@@ -1,0 +1,14 @@
+name: stout-backend
+channels:
+  - conda-forge
+  - decimer
+dependencies:
+  - python=3.8
+  - openjdk=11
+  - stout-pypi
+  - fastapi
+  - uvicorn
+  - pip
+  - pip:
+      - python-dotenv
+      - pydantic 
