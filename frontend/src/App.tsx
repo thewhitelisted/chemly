@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import LandingPage from './components/LandingPage';
 import About from './components/About';
 import Contact from './components/Contact';
+import Products from './components/Products';
 import { ChemCanvas } from './components/ChemCanvas';
 import { Toolbar } from './components/Toolbar';
 import { Sidebar } from './components/Sidebar';
@@ -95,7 +96,7 @@ function App() {
           </div>
         } />
         {/* Navbar for all other routes */}
-        <Route path="/*" element={<><Navbar /><Routes><Route path="/" element={<LandingPage />} /><Route path="/about" element={<About />} /><Route path="/contact" element={<Contact />} /></Routes></>} />
+        <Route path="/*" element={<><Navbar /><Routes><Route path="/" element={<LandingPage />} /><Route path="/products" element={<Products />} /><Route path="/about" element={<About />} /><Route path="/contact" element={<Contact />} /></Routes></>} />
       </Routes>
     </Router>
   );

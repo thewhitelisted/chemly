@@ -5,7 +5,7 @@ export default function About() {
     <div className="min-h-[80vh] bg-gradient-to-b from-[#fffae2] via-[#e0f7f4] to-[#f8fafc] flex flex-col items-center font-sans px-0 py-0 pt-24">
       {/* Hero Section - visually engaging */}
       <section className="w-full relative overflow-hidden min-h-[60vh] md:min-h-[80vh] py-24 md:py-36 px-4 mb-24">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-[auto_340px] place-items-center gap-x-16">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-[auto_340px] place-items-center gap-x-16">
           {/* Floating molecule SVG background */}
           <svg className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[420px] h-[320px] opacity-30 blur-md z-0 hidden md:block" viewBox="0 0 420 320" fill="none">
             <circle cx="110" cy="160" r="60" fill="#0097b2" fillOpacity="0.18" />
@@ -20,7 +20,7 @@ export default function About() {
               transition={{ duration: 0.9 }}
               className="text-3xl md:text-5xl font-extrabold mb-6 max-w-6xl lg:max-w-none text-center md:text-left tracking-tight drop-shadow-2xl text-[#18181b]"
             >
-              Reimagining <span className="inline-block bg-[#e0f7f4] text-[#007d40] font-bold px-2 py-1 rounded-md mx-2 my-1 whitespace-nowrap">chemistry software</span> for the <span className="inline-block bg-[#e0f7f4] text-[#007d40] font-bold px-2 py-1 rounded-md mx-2 my-1 whitespace-nowrap">next generation</span> of <span className="inline-block bg-[#e0f7f4] text-[#007d40] font-bold px-2 py-1 rounded-md mx-2 my-1 whitespace-nowrap">scientists</span>, <span className="inline-block bg-[#e0f7f4] text-[#007d40] font-bold px-2 py-1 rounded-md mx-2 my-1 whitespace-nowrap">educators</span>, and <span className="inline-block bg-[#e0f7f4] text-[#007d40] font-bold px-2 py-1 rounded-md mx-2 my-1 whitespace-nowrap">innovators</span>.
+              Reimagining <span className="inline-block bg-[#e0f7f4] text-[#007d40] font-bold px-3 py-2 rounded-md my-2 whitespace-nowrap">chemistry</span> for the <span className="inline-block bg-[#e0f7f4] text-[#007d40] font-bold px-3 py-2 rounded-md my-2 whitespace-nowrap">next generation</span> of <span className="inline-block bg-[#e0f7f4] text-[#007d40] font-bold px-3 py-2 rounded-md my-2 whitespace-nowrap">scientists</span>, <span className="inline-block bg-[#e0f7f4] text-[#007d40] font-bold px-3 py-2 rounded-md my-2 whitespace-nowrap">educators</span>, and <span className="inline-block bg-[#e0f7f4] text-[#007d40] font-bold px-3 py-2 rounded-md my-2 whitespace-nowrap">innovators</span>.
             </motion.p>
             <motion.p
               initial={{ opacity: 0, y: 30 }}
@@ -68,7 +68,7 @@ export default function About() {
       </section>
       {/* Mission & Values Section - Modern Glass Style */}
       <section id="mission-values" className="w-full py-20 px-4">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 items-center gap-20">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 items-center gap-20">
           {/* Left: Mission Heading and Text */}
           <motion.div
             initial={{ opacity: 0, x: -40 }}

@@ -25,7 +25,8 @@ export default function LandingPage() {
           <svg className="absolute left-1/2 top-0 -translate-x-1/2" width="800" height="120" fill="none" viewBox="0 0 800 120"><path d="M0 60 Q200 0 400 60 T800 60 V120 H0Z" fill="#0097b2" fillOpacity="0.08"/></svg>
         </div>
         <h1 className="text-4xl md:text-6xl lg:text-7xl font-black text-center tracking-tight text-[#18181b] drop-shadow-xl mb-8 animate-fade-in-up">
-          because <span className="bg-gradient-to-r from-[#007d40] via-[#0097b2] to-[#007d40] bg-clip-text text-transparent">research grade software</span><br className="hidden md:block" /> shouldn't look like <span className="text-[#0097b2]">sh*t</span>
+          <div>because <span className="bg-gradient-to-r from-[#007d40] via-[#0097b2] to-[#007d40] bg-clip-text text-transparent">research grade software</span></div>
+          <div className="mt-4">shouldn't look like <span className="text-[#0097b2]">sh*t</span></div>
         </h1>
         <div className="mt-10 flex flex-col items-center gap-6 animate-fade-in-up delay-200">
           <Link
