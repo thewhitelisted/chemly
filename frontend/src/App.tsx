@@ -4,6 +4,7 @@ import LandingPage from './components/LandingPage';
 import About from './components/About';
 import Contact from './components/Contact';
 import Products from './components/Products';
+import Pricing from './components/Pricing';
 import { ChemCanvas } from './components/ChemCanvas';
 import { Toolbar } from './components/Toolbar';
 import { Sidebar } from './components/Sidebar';
@@ -12,6 +13,7 @@ import { graphToOclMolecule, oclMoleculeToGraph } from './utils/oclGraphAdapter'
 import * as OCL from 'openchemlib';
 import { HydrogenManager } from './utils/hydrogenManager';
 import Navbar from './components/Navbar';
+import ScrollToTop from './components/ScrollToTop';
 
 function App() {
   const [drawingState, setDrawingState] = useState<DrawingState>({
@@ -67,6 +69,7 @@ function App() {
 
   return (
     <Router>
+      <ScrollToTop />
       {/* Only show Navbar on non-app routes */}
       <Routes>
         <Route path="/app" element={
@@ -96,7 +99,7 @@ function App() {
           </div>
         } />
         {/* Navbar for all other routes */}
-        <Route path="/*" element={<><Navbar /><Routes><Route path="/" element={<LandingPage />} /><Route path="/products" element={<Products />} /><Route path="/about" element={<About />} /><Route path="/contact" element={<Contact />} /></Routes></>} />
+        <Route path="/*" element={<><Navbar /><Routes><Route path="/" element={<LandingPage />} /><Route path="/products" element={<Products />} /><Route path="/about" element={<About />} /><Route path="/contact" element={<Contact />} /><Route path="/pricing" element={<Pricing />} /></Routes></>} />
       </Routes>
     </Router>
   );

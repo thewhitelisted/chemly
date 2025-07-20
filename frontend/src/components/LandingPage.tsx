@@ -13,7 +13,7 @@ export default function LandingPage() {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   return (
-    <div className="min-h-screen bg-[#fffae2] flex flex-col font-sans pt-24">
+    <div className="min-h-screen bg-gradient-to-b from-[#fffae2] via-[#e0f7f4] to-[#f8fafc] flex flex-col font-sans pt-24">
       {/* Modern Glassy Navbar */}
       {/* Navbar removed: now global in App.tsx */}
       {/* Hero Section with WOW factor */}
@@ -24,9 +24,9 @@ export default function LandingPage() {
           <div className="absolute top-1/2 right-0 w-[400px] h-[400px] bg-gradient-to-tr from-[#fffae2]/80 via-[#0097b2]/40 to-[#007d40]/0 rounded-full blur-2xl opacity-80 animate-pulse-slower" />
           <svg className="absolute left-1/2 top-0 -translate-x-1/2" width="800" height="120" fill="none" viewBox="0 0 800 120"><path d="M0 60 Q200 0 400 60 T800 60 V120 H0Z" fill="#0097b2" fillOpacity="0.08"/></svg>
         </div>
-        <h1 className="text-4xl md:text-6xl lg:text-7xl font-black text-center tracking-tight text-[#18181b] drop-shadow-xl mb-8 animate-fade-in-up">
-          <div>because <span className="bg-gradient-to-r from-[#007d40] via-[#0097b2] to-[#007d40] bg-clip-text text-transparent">research grade software</span></div>
-          <div className="mt-4">shouldn't look like <span className="text-[#0097b2]">sh*t</span></div>
+        <h1 className="text-3xl md:text-5xl lg:text-[4.25rem] font-black text-center tracking-tight text-[#18181b] drop-shadow-xl mb-8 animate-fade-in-up">
+          <div>Smarter tools for a new era of chemistry</div>
+          <div className="mt-4 text-xl md:text-2xl lg:text-3xl font-medium text-[#0097b2]">powered by AI, inspired by academics, built for the future.</div>
         </h1>
         <div className="mt-10 flex flex-col items-center gap-6 animate-fade-in-up delay-200">
           <Link
@@ -38,7 +38,7 @@ export default function LandingPage() {
         </div>
       </section>
       {/* Footer */}
-      <footer className="w-full mt-auto py-4 px-4 bg-white/40 bg-gradient-to-t from-[#e0f7f4]/60 to-[#fffae2]/40 backdrop-blur-md border-t border-[#e0f7f4] text-center text-[#007d40] font-normal text-sm rounded-t-2xl shadow-none flex items-center justify-center" style={{letterSpacing: '0.01em'}}>
+      <footer className="w-full mt-auto py-4 px-4 bg-transparent backdrop-blur-sm border-t border-[#e0f7f4]/50 text-center text-[#007d40] font-normal text-sm rounded-t-2xl shadow-none flex items-center justify-center" style={{letterSpacing: '0.01em'}}>
         &copy; {new Date().getFullYear()} OrgoLab. All rights reserved.
       </footer>
       {/* Animations */}

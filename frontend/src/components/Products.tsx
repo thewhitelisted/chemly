@@ -1,5 +1,18 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
+import { 
+  TestTube, 
+  Pencil, 
+  Bot, 
+  Search, 
+  BarChart3, 
+  Moon, 
+  Zap, 
+  Dna, 
+  Microscope, 
+  Users,
+  ArrowDown
+} from 'lucide-react';
 
 export default function Products() {
   return (
@@ -29,7 +42,7 @@ export default function Products() {
               transition={{ duration: 1.1, delay: 0.2 }}
               className="text-lg md:text-xl text-[#0097b2] font-medium mb-8 max-w-xl text-center md:text-left"
             >
-              Discover the powerful tools we've built to revolutionize organic chemistry workflows.
+              Discover the powerful tools we've built to revolutionize chemistry workflows.
             </motion.p>
           </div>
           {/* Animated product showcase on the right */}
@@ -38,32 +51,32 @@ export default function Products() {
               {/* Main product icon */}
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="w-32 h-32 bg-gradient-to-br from-[#007d40] to-[#0097b2] rounded-3xl shadow-2xl flex items-center justify-center animate-[pulse-product_4s_ease-in-out_infinite]">
-                  <span className="text-6xl">🧪</span>
+                  <TestTube className="w-16 h-16 text-white" />
                 </div>
               </div>
               
               {/* Orbiting feature icons */}
               <div className="absolute inset-0 animate-[rotate-orbit_20s_linear_infinite]">
                 <div className="absolute top-8 left-1/2 -translate-x-1/2 w-16 h-16 bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg flex items-center justify-center animate-[float-feature1_3s_ease-in-out_infinite]">
-                  <span className="text-2xl">✏️</span>
+                  <Pencil className="w-8 h-8 text-[#007d40]" />
                 </div>
               </div>
               
               <div className="absolute inset-0 animate-[rotate-orbit_20s_linear_infinite_reverse]">
                 <div className="absolute top-8 right-8 w-12 h-12 bg-white/80 backdrop-blur-sm rounded-xl shadow-lg flex items-center justify-center animate-[float-feature2_4s_ease-in-out_infinite]">
-                  <span className="text-xl">🤖</span>
+                  <Bot className="w-6 h-6 text-[#0097b2]" />
                 </div>
               </div>
               
               <div className="absolute inset-0 animate-[rotate-orbit_15s_linear_infinite]">
                 <div className="absolute bottom-8 left-8 w-14 h-14 bg-white/80 backdrop-blur-sm rounded-xl shadow-lg flex items-center justify-center animate-[float-feature3_3.5s_ease-in-out_infinite]">
-                  <span className="text-xl">🔍</span>
+                  <Search className="w-7 h-7 text-[#007d40]" />
                 </div>
               </div>
               
               <div className="absolute inset-0 animate-[rotate-orbit_18s_linear_infinite_reverse]">
                 <div className="absolute bottom-8 right-1/2 translate-x-1/2 w-10 h-10 bg-white/80 backdrop-blur-sm rounded-lg shadow-lg flex items-center justify-center animate-[float-feature4_2.5s_ease-in-out_infinite]">
-                  <span className="text-lg">⚡</span>
+                  <Zap className="w-5 h-5 text-[#0097b2]" />
                 </div>
               </div>
               
@@ -90,10 +103,10 @@ export default function Products() {
               window.scrollTo({ top: y, behavior: 'smooth' });
             }
           }}
-            className="animate-bounce text-[#0097b2] text-3xl md:text-4xl cursor-pointer hover:text-[#007d40] transition-colors duration-200 focus:outline-none"
+            className="animate-bounce text-[#0097b2] cursor-pointer hover:text-[#007d40] transition-colors duration-200 focus:outline-none"
             aria-label="Scroll to main products section"
           >
-            ↓
+            <ArrowDown className="w-8 h-8 md:w-10 md:h-10" />
           </a>
         </motion.div>
       </section>
@@ -156,7 +169,7 @@ export default function Products() {
               </div>
               <div className="bg-gradient-to-br from-[#e0f7f4] to-[#fffae2] rounded-2xl p-8 flex items-center justify-center">
                 <div className="text-center">
-                  <div className="text-6xl mb-4">🧪</div>
+                  <TestTube className="w-16 h-16 text-[#007d40] mb-4 mx-auto" />
                   <p className="text-[#007d40] font-semibold">Interactive Demo</p>
                 </div>
               </div>
@@ -186,37 +199,37 @@ export default function Products() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {[
               {
-                icon: "✏️",
+                icon: <Pencil className="w-10 h-10" />,
                 title: "Intuitive Drawing",
                 description: "Draw molecules naturally with our smart drawing tools. Add atoms, bonds, and functional groups with just a few clicks.",
                 color: "#007d40"
               },
               {
-                icon: "🤖",
+                icon: <Bot className="w-10 h-10" />,
                 title: "AI Assistance",
                 description: "Let AI help you complete structures, suggest optimizations, and validate your molecular designs in real-time.",
                 color: "#0097b2"
               },
               {
-                icon: "🔍",
+                icon: <Search className="w-10 h-10" />,
                 title: "Structure Validation",
                 description: "Automatic validation ensures your molecules are chemically sound and properly formatted.",
                 color: "#007d40"
               },
               {
-                icon: "📊",
+                icon: <BarChart3 className="w-10 h-10" />,
                 title: "SMILES Integration",
                 description: "Export and import structures using SMILES notation for seamless integration with other chemistry tools.",
                 color: "#0097b2"
               },
               {
-                icon: "🌙",
+                icon: <Moon className="w-10 h-10" />,
                 title: "Dark Mode",
                 description: "Work comfortably in any lighting condition with our beautiful dark mode interface.",
                 color: "#007d40"
               },
               {
-                icon: "⚡",
+                icon: <Zap className="w-10 h-10" />,
                 title: "Real-time Updates",
                 description: "See changes instantly as you build and modify molecular structures with live preview.",
                 color: "#0097b2"
@@ -231,7 +244,9 @@ export default function Products() {
                 className="bg-white/60 backdrop-blur-md rounded-2xl shadow-xl p-8 border border-[#e0f7f4] flex flex-col gap-4 transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:border-[#0097b2] hover:bg-white/80 hover:backdrop-blur-xl cursor-pointer"
               >
                 <div className="flex items-center gap-4">
-                  <span className="text-4xl">{feature.icon}</span>
+                  <div style={{ color: feature.color }}>
+                    {feature.icon}
+                  </div>
                   <span className="font-bold text-xl" style={{ color: feature.color }}>
                     {feature.title}
                   </span>
@@ -266,25 +281,25 @@ export default function Products() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {[
               {
-                icon: "🧬",
+                icon: <Dna className="w-10 h-10" />,
                 title: "Reaction Planning",
                 description: "AI-powered reaction planning and synthesis route optimization for complex organic molecules.",
                 status: "In Development"
               },
               {
-                icon: "🔬",
+                icon: <Microscope className="w-10 h-10" />,
                 title: "Lab Integration",
                 description: "Seamless integration with laboratory equipment and data management systems.",
                 status: "Planned"
               },
               {
-                icon: "🔬",
+                icon: <Microscope className="w-10 h-10" />,
                 title: "Spectroscopy Tools",
                 description: "Integrated NMR, IR, and mass spectrometry prediction and analysis tools.",
                 status: "Research Phase"
               },
               {
-                icon: "👥",
+                icon: <Users className="w-10 h-10" />,
                 title: "Collaboration Features",
                 description: "Real-time collaboration tools for research teams and educational institutions.",
                 status: "Planned"
@@ -300,7 +315,9 @@ export default function Products() {
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    <span className="text-4xl">{product.icon}</span>
+                    <div className="text-[#007d40]">
+                      {product.icon}
+                    </div>
                     <span className="font-bold text-xl text-[#007d40]">
                       {product.title}
                     </span>
@@ -317,6 +334,88 @@ export default function Products() {
           </div>
         </div>
       </section>
+      
+      {/* Footer */}
+      <footer className="w-full mt-auto bg-transparent backdrop-blur-sm border-t border-[#e0f7f4]/50">
+        <div className="max-w-7xl mx-auto px-4 py-16">
+          {/* Main Footer Content */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-16 mb-12">
+            {/* Section 1: Slogan */}
+            <div className="space-y-6">
+              <div className="space-y-4">
+                <h3 className="text-2xl font-extrabold tracking-tight drop-shadow-[0_1px_4px_#0097b2aa]">
+                  <span className="text-[#007d40]">Orgo</span>
+                  <span className="text-[#0097b2]">Lab</span>
+                </h3>
+                <p className="text-lg text-[#18181b] opacity-80 leading-relaxed">
+                  Reimagining chemistry for the next generation of scientists, educators, and innovators.
+                </p>
+              </div>
+            </div>
+
+            {/* Section 2: Product, Company, Support - Horizontal */}
+            <div className="space-y-6 ml-8">
+              <div className="flex flex-wrap gap-12">
+                <div className="space-y-4">
+                  <h4 className="text-sm font-semibold text-[#007d40] uppercase tracking-wide">Product</h4>
+                  <ul className="space-y-3">
+                    <li><a href="/app" className="text-[#18181b] opacity-80 hover:text-[#0097b2] transition-colors text-sm">OrgoDraw</a></li>
+                    <li><a href="/pricing" className="text-[#18181b] opacity-80 hover:text-[#0097b2] transition-colors text-sm">Pricing</a></li>
+                  </ul>
+                </div>
+                
+                <div className="space-y-4">
+                  <h4 className="text-sm font-semibold text-[#007d40] uppercase tracking-wide">Company</h4>
+                  <ul className="space-y-3">
+                    <li><a href="/about" className="text-[#18181b] opacity-80 hover:text-[#0097b2] transition-colors text-sm">About</a></li>
+                  </ul>
+                </div>
+                
+                <div className="space-y-4">
+                  <h4 className="text-sm font-semibold text-[#007d40] uppercase tracking-wide">Support</h4>
+                  <ul className="space-y-3">
+                    <li><a href="/contact" className="text-[#18181b] opacity-80 hover:text-[#0097b2] transition-colors text-sm">Contact</a></li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 3: Newsletter */}
+            <div className="space-y-6">
+              <div className="space-y-4">
+                <h4 className="text-sm font-semibold text-[#007d40] uppercase tracking-wide">Newsletter</h4>
+                <p className="text-sm text-[#18181b] opacity-70">
+                  Stay updated with our latest features and chemistry insights.
+                </p>
+                <div className="flex">
+                  <input 
+                    type="email" 
+                    placeholder="Enter your email" 
+                    className="flex-1 px-4 py-2 text-sm border border-[#e0f7f4] rounded-l-lg focus:outline-none focus:ring-2 focus:ring-[#0097b2] focus:border-transparent"
+                  />
+                  <button className="px-4 py-2 bg-[#007d40] text-white text-sm font-medium rounded-r-lg hover:bg-[#0097b2] transition-colors">
+                    Subscribe
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Section */}
+          <div className="pt-8 border-t border-[#e0f7f4]/50">
+            <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
+              <p className="text-sm text-[#18181b] opacity-80">
+                &copy; {new Date().getFullYear()} OrgoLab. All rights reserved.
+              </p>
+              <div className="flex space-x-6 text-sm">
+                <a href="#" className="text-[#18181b] opacity-80 hover:text-[#0097b2] transition-colors">Privacy Policy</a>
+                <a href="#" className="text-[#18181b] opacity-80 hover:text-[#0097b2] transition-colors">Terms of Service</a>
+                <a href="#" className="text-[#18181b] opacity-80 hover:text-[#0097b2] transition-colors">Cookie Policy</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </footer>
 
       <style>{`
         @keyframes pulse-product {

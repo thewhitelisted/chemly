@@ -1,4 +1,12 @@
 import { motion } from 'framer-motion';
+import { 
+  MessageCircle, 
+  Mail, 
+  Monitor, 
+  Handshake, 
+  Lightbulb, 
+  ArrowDown 
+} from 'lucide-react';
 
 export default function Contact() {
   return (
@@ -31,46 +39,42 @@ export default function Contact() {
               Have questions, feedback, or want to collaborate? We'd love to hear from you.
             </motion.p>
           </div>
-          {/* Animated contact icons on the right */}
+          {/* Modern geometric animation */}
           <div className="w-full flex justify-center items-center z-10">
             <div className="relative w-[340px] h-[340px]">
-              {/* Main contact icon */}
+              {/* Central geometric shape */}
               <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-32 h-32 bg-gradient-to-br from-[#007d40] to-[#0097b2] rounded-3xl shadow-2xl flex items-center justify-center animate-[pulse-contact_4s_ease-in-out_infinite]">
-                  <span className="text-6xl">💬</span>
+                <div className="w-32 h-32 bg-gradient-to-br from-[#007d40] to-[#0097b2] rounded-2xl shadow-2xl flex items-center justify-center animate-[geometric-rotate_8s_linear_infinite] relative">
+                  <div className="w-20 h-20 bg-white/20 rounded-xl"></div>
                 </div>
               </div>
               
-              {/* Floating contact method icons */}
-              <div className="absolute inset-0 animate-[rotate-orbit_25s_linear_infinite]">
-                <div className="absolute top-8 left-1/2 -translate-x-1/2 w-16 h-16 bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg flex items-center justify-center animate-[float-contact1_3s_ease-in-out_infinite]">
-                  <span className="text-2xl">📧</span>
-                </div>
-              </div>
+              {/* Floating geometric elements */}
+              <div className="absolute top-12 left-12 w-16 h-16 bg-gradient-to-br from-[#0097b2] to-[#007d40] rounded-full shadow-lg animate-[float-geo1_6s_ease-in-out_infinite]"></div>
               
-              <div className="absolute inset-0 animate-[rotate-orbit_25s_linear_infinite_reverse]">
-                <div className="absolute top-8 right-8 w-12 h-12 bg-white/80 backdrop-blur-sm rounded-xl shadow-lg flex items-center justify-center animate-[float-contact2_4s_ease-in-out_infinite]">
-                  <span className="text-xl">💻</span>
-                </div>
-              </div>
+              <div className="absolute top-16 right-16 w-12 h-12 bg-gradient-to-br from-[#007d40] to-[#0097b2] rounded-lg shadow-lg animate-[float-geo2_7s_ease-in-out_infinite]"></div>
               
-              <div className="absolute inset-0 animate-[rotate-orbit_20s_linear_infinite]">
-                <div className="absolute bottom-8 left-8 w-14 h-14 bg-white/80 backdrop-blur-sm rounded-xl shadow-lg flex items-center justify-center animate-[float-contact3_3.5s_ease-in-out_infinite]">
-                  <span className="text-xl">🤝</span>
-                </div>
-              </div>
+              <div className="absolute bottom-16 left-16 w-14 h-14 bg-gradient-to-br from-[#0097b2] to-[#007d40] rounded-xl shadow-lg animate-[float-geo3_5.5s_ease-in-out_infinite]"></div>
               
-              <div className="absolute inset-0 animate-[rotate-orbit_22s_linear_infinite_reverse]">
-                <div className="absolute bottom-8 right-1/2 translate-x-1/2 w-10 h-10 bg-white/80 backdrop-blur-sm rounded-lg shadow-lg flex items-center justify-center animate-[float-contact4_2.5s_ease-in-out_infinite]">
-                  <span className="text-lg">💡</span>
-                </div>
-              </div>
+              <div className="absolute bottom-12 right-12 w-10 h-10 bg-gradient-to-br from-[#007d40] to-[#0097b2] rounded-2xl shadow-lg animate-[float-geo4_6.5s_ease-in-out_infinite]"></div>
+              
+              {/* Accent lines */}
+              <div className="absolute top-1/2 left-1/4 w-1 h-8 bg-gradient-to-b from-[#0097b2] to-transparent animate-[line-grow1_4s_ease-in-out_infinite]"></div>
+              <div className="absolute top-1/2 right-1/4 w-1 h-8 bg-gradient-to-b from-[#007d40] to-transparent animate-[line-grow2_4.5s_ease-in-out_infinite]"></div>
+              <div className="absolute left-1/2 top-1/4 w-8 h-1 bg-gradient-to-r from-[#0097b2] to-transparent animate-[line-grow3_5s_ease-in-out_infinite]"></div>
+              <div className="absolute left-1/2 bottom-1/4 w-8 h-1 bg-gradient-to-r from-[#007d40] to-transparent animate-[line-grow4_5.5s_ease-in-out_infinite]"></div>
               
               {/* Floating particles */}
-              <div className="absolute top-1/4 left-1/4 w-3 h-3 bg-[#0097b2] rounded-full opacity-60 animate-[float-particle1_6s_ease-in-out_infinite]"></div>
-              <div className="absolute top-1/3 right-1/3 w-2 h-2 bg-[#007d40] rounded-full opacity-50 animate-[float-particle2_8s_ease-in-out_infinite]"></div>
-              <div className="absolute bottom-1/4 right-1/4 w-4 h-4 bg-[#0097b2] rounded-full opacity-40 animate-[float-particle3_7s_ease-in-out_infinite]"></div>
-              <div className="absolute bottom-1/3 left-1/3 w-2 h-2 bg-[#007d40] rounded-full opacity-60 animate-[float-particle4_5s_ease-in-out_infinite]"></div>
+              <div className="absolute top-1/3 left-1/3 w-3 h-3 bg-[#0097b2] rounded-full opacity-60 animate-[particle-float1_8s_ease-in-out_infinite]"></div>
+              <div className="absolute top-1/3 right-1/3 w-2 h-2 bg-[#007d40] rounded-full opacity-60 animate-[particle-float2_9s_ease-in-out_infinite]"></div>
+              <div className="absolute bottom-1/3 left-1/3 w-2.5 h-2.5 bg-[#0097b2] rounded-full opacity-60 animate-[particle-float3_7s_ease-in-out_infinite]"></div>
+              <div className="absolute bottom-1/3 right-1/3 w-1.5 h-1.5 bg-[#007d40] rounded-full opacity-60 animate-[particle-float4_10s_ease-in-out_infinite]"></div>
+              
+              {/* Corner accents */}
+              <div className="absolute top-4 left-4 w-6 h-6 border-2 border-[#0097b2]/30 rounded-full animate-[corner-pulse1_3s_ease-in-out_infinite]"></div>
+              <div className="absolute top-4 right-4 w-6 h-6 border-2 border-[#007d40]/30 rounded-full animate-[corner-pulse2_3.5s_ease-in-out_infinite]"></div>
+              <div className="absolute bottom-4 left-4 w-6 h-6 border-2 border-[#0097b2]/30 rounded-full animate-[corner-pulse3_4s_ease-in-out_infinite]"></div>
+              <div className="absolute bottom-4 right-4 w-6 h-6 border-2 border-[#007d40]/30 rounded-full animate-[corner-pulse4_4.5s_ease-in-out_infinite]"></div>
             </div>
           </div>
         </div>
@@ -89,10 +93,10 @@ export default function Contact() {
               window.scrollTo({ top: y, behavior: 'smooth' });
             }
           }}
-            className="animate-bounce text-[#0097b2] text-3xl md:text-4xl cursor-pointer hover:text-[#007d40] transition-colors duration-200 focus:outline-none"
+            className="animate-bounce text-[#0097b2] cursor-pointer hover:text-[#007d40] transition-colors duration-200 focus:outline-none"
             aria-label="Scroll to contact form section"
           >
-            ↓
+            <ArrowDown className="w-8 h-8 md:w-10 md:h-10" />
           </a>
         </motion.div>
       </section>
@@ -184,66 +188,262 @@ export default function Contact() {
           </motion.div>
         </div>
       </section>
+      
+      {/* Footer */}
+      <footer className="w-full mt-auto bg-transparent backdrop-blur-sm border-t border-[#e0f7f4]/50">
+        <div className="max-w-7xl mx-auto px-4 py-16">
+          {/* Main Footer Content */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-16 mb-12">
+            {/* Section 1: Slogan */}
+            <div className="space-y-6">
+              <div className="space-y-4">
+                <h3 className="text-2xl font-extrabold tracking-tight drop-shadow-[0_1px_4px_#0097b2aa]">
+                  <span className="text-[#007d40]">Orgo</span>
+                  <span className="text-[#0097b2]">Lab</span>
+                </h3>
+                <p className="text-lg text-[#18181b] opacity-80 leading-relaxed">
+                  Reimagining chemistry for the next generation of scientists, educators, and innovators.
+                </p>
+              </div>
+            </div>
+
+            {/* Section 2: Product, Company, Support - Horizontal */}
+            <div className="space-y-6 ml-8">
+              <div className="flex flex-wrap gap-12">
+                <div className="space-y-4">
+                  <h4 className="text-sm font-semibold text-[#007d40] uppercase tracking-wide">Product</h4>
+                  <ul className="space-y-3">
+                    <li><a href="/app" className="text-[#18181b] opacity-80 hover:text-[#0097b2] transition-colors text-sm">OrgoDraw</a></li>
+                    <li><a href="/pricing" className="text-[#18181b] opacity-80 hover:text-[#0097b2] transition-colors text-sm">Pricing</a></li>
+                  </ul>
+                </div>
+                
+                <div className="space-y-4">
+                  <h4 className="text-sm font-semibold text-[#007d40] uppercase tracking-wide">Company</h4>
+                  <ul className="space-y-3">
+                    <li><a href="/about" className="text-[#18181b] opacity-80 hover:text-[#0097b2] transition-colors text-sm">About</a></li>
+                  </ul>
+                </div>
+                
+                <div className="space-y-4">
+                  <h4 className="text-sm font-semibold text-[#007d40] uppercase tracking-wide">Support</h4>
+                  <ul className="space-y-3">
+                    <li><a href="/contact" className="text-[#18181b] opacity-80 hover:text-[#0097b2] transition-colors text-sm">Contact</a></li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 3: Newsletter */}
+            <div className="space-y-6">
+              <div className="space-y-4">
+                <h4 className="text-sm font-semibold text-[#007d40] uppercase tracking-wide">Newsletter</h4>
+                <p className="text-sm text-[#18181b] opacity-70">
+                  Stay updated with our latest features and chemistry insights.
+                </p>
+                <div className="flex">
+                  <input 
+                    type="email" 
+                    placeholder="Enter your email" 
+                    className="flex-1 px-4 py-2 text-sm border border-[#e0f7f4] rounded-l-lg focus:outline-none focus:ring-2 focus:ring-[#0097b2] focus:border-transparent"
+                  />
+                  <button className="px-4 py-2 bg-[#007d40] text-white text-sm font-medium rounded-r-lg hover:bg-[#0097b2] transition-colors">
+                    Subscribe
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Section */}
+          <div className="pt-8 border-t border-[#e0f7f4]/50">
+            <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
+              <p className="text-sm text-[#18181b] opacity-80">
+                &copy; {new Date().getFullYear()} OrgoLab. All rights reserved.
+              </p>
+              <div className="flex space-x-6 text-sm">
+                <a href="#" className="text-[#18181b] opacity-80 hover:text-[#0097b2] transition-colors">Privacy Policy</a>
+                <a href="#" className="text-[#18181b] opacity-80 hover:text-[#0097b2] transition-colors">Terms of Service</a>
+                <a href="#" className="text-[#18181b] opacity-80 hover:text-[#0097b2] transition-colors">Cookie Policy</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </footer>
 
       <style>{`
-        @keyframes pulse-contact {
-          0%, 100% { transform: scale(1) rotate(0deg); }
-          25% { transform: scale(1.05) rotate(2deg); }
-          50% { transform: scale(1.1) rotate(0deg); }
-          75% { transform: scale(1.05) rotate(-2deg); }
-        }
-        
-        @keyframes rotate-orbit {
+        @keyframes geometric-rotate {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }
         
-        @keyframes rotate-orbit-reverse {
-          0% { transform: rotate(360deg); }
-          100% { transform: rotate(0deg); }
-        }
-        
-        @keyframes float-contact1 {
+        @keyframes float-geo1 {
           0%, 100% { transform: translateY(0) scale(1); }
-          50% { transform: translateY(-8px) scale(1.1); }
+          50% { transform: translateY(-15px) scale(1.1); }
         }
         
-        @keyframes float-contact2 {
+        @keyframes float-geo2 {
           0%, 100% { transform: translateY(0) scale(1); }
-          50% { transform: translateY(-12px) scale(0.95); }
+          50% { transform: translateY(12px) scale(0.9); }
         }
         
-        @keyframes float-contact3 {
+        @keyframes float-geo3 {
           0%, 100% { transform: translateY(0) scale(1); }
           50% { transform: translateY(-10px) scale(1.05); }
         }
         
-        @keyframes float-contact4 {
+        @keyframes float-geo4 {
           0%, 100% { transform: translateY(0) scale(1); }
-          50% { transform: translateY(-6px) scale(1.15); }
+          50% { transform: translateY(8px) scale(0.95); }
         }
         
-        @keyframes float-particle1 {
+        @keyframes line-grow1 {
+          0% { height: 0; opacity: 0; }
+          50% { height: 32px; opacity: 0.6; }
+          100% { height: 0; opacity: 0; }
+        }
+        
+        @keyframes line-grow2 {
+          0% { height: 0; opacity: 0; }
+          50% { height: 36px; opacity: 0.6; }
+          100% { height: 0; opacity: 0; }
+        }
+        
+        @keyframes line-grow3 {
+          0% { width: 0; opacity: 0; }
+          50% { width: 32px; opacity: 0.6; }
+          100% { width: 0; opacity: 0; }
+        }
+        
+        @keyframes line-grow4 {
+          0% { width: 0; opacity: 0; }
+          50% { width: 36px; opacity: 0.6; }
+          100% { width: 0; opacity: 0; }
+        }
+        
+        @keyframes particle-float1 {
           0%, 100% { transform: translateY(0) translateX(0); opacity: 0.6; }
-          25% { transform: translateY(-15px) translateX(10px); opacity: 0.8; }
-          50% { transform: translateY(-25px) translateX(0); opacity: 0.4; }
-          75% { transform: translateY(-15px) translateX(-10px); opacity: 0.6; }
+          50% { transform: translateY(-20px) translateX(10px); opacity: 0.8; }
         }
         
-        @keyframes float-particle2 {
-          0%, 100% { transform: translateY(0) translateX(0); opacity: 0.5; }
-          33% { transform: translateY(-20px) translateX(-15px); opacity: 0.7; }
-          66% { transform: translateY(-30px) translateX(15px); opacity: 0.3; }
-        }
-        
-        @keyframes float-particle3 {
-          0%, 100% { transform: translateY(0) translateX(0); opacity: 0.4; }
-          50% { transform: translateY(-18px) translateX(12px); opacity: 0.6; }
-        }
-        
-        @keyframes float-particle4 {
+        @keyframes particle-float2 {
           0%, 100% { transform: translateY(0) translateX(0); opacity: 0.6; }
-          50% { transform: translateY(-22px) translateX(-8px); opacity: 0.4; }
+          50% { transform: translateY(15px) translateX(-8px); opacity: 0.8; }
+        }
+        
+        @keyframes particle-float3 {
+          0%, 100% { transform: translateY(0) translateX(0); opacity: 0.6; }
+          50% { transform: translateY(-12px) translateX(-5px); opacity: 0.8; }
+        }
+        
+        @keyframes particle-float4 {
+          0%, 100% { transform: translateY(0) translateX(0); opacity: 0.6; }
+          50% { transform: translateY(18px) translateX(6px); opacity: 0.8; }
+        }
+        
+        @keyframes corner-pulse1 {
+          0%, 100% { transform: scale(1); opacity: 0.3; }
+          50% { transform: scale(1.2); opacity: 0.6; }
+        }
+        
+        @keyframes corner-pulse2 {
+          0%, 100% { transform: scale(1); opacity: 0.3; }
+          50% { transform: scale(1.15); opacity: 0.5; }
+        }
+        
+        @keyframes corner-pulse3 {
+          0%, 100% { transform: scale(1); opacity: 0.3; }
+          50% { transform: scale(1.25); opacity: 0.6; }
+        }
+        
+        @keyframes corner-pulse4 {
+          0%, 100% { transform: scale(1); opacity: 0.3; }
+          50% { transform: scale(1.1); opacity: 0.4; }
+        }
+
+        @keyframes geometric-rotate {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+
+        @keyframes float-geo1 {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-10px); }
+        }
+
+        @keyframes float-geo2 {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(10px); }
+        }
+
+        @keyframes float-geo3 {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-8px); }
+        }
+
+        @keyframes float-geo4 {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(8px); }
+        }
+
+        @keyframes line-grow1 {
+          0% { height: 0; }
+          100% { height: 80px; }
+        }
+
+        @keyframes line-grow2 {
+          0% { height: 0; }
+          100% { height: 90px; }
+        }
+
+        @keyframes line-grow3 {
+          0% { width: 0; }
+          100% { width: 80px; }
+        }
+
+        @keyframes line-grow4 {
+          0% { width: 0; }
+          100% { width: 90px; }
+        }
+
+        @keyframes particle-float1 {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-10px); }
+        }
+
+        @keyframes particle-float2 {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(10px); }
+        }
+
+        @keyframes particle-float3 {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-8px); }
+        }
+
+        @keyframes particle-float4 {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(8px); }
+        }
+
+        @keyframes corner-pulse1 {
+          0%, 100% { transform: scale(1); opacity: 0.6; }
+          50% { transform: scale(1.1); opacity: 0.8; }
+        }
+
+        @keyframes corner-pulse2 {
+          0%, 100% { transform: scale(1); opacity: 0.6; }
+          50% { transform: scale(1.1); opacity: 0.8; }
+        }
+
+        @keyframes corner-pulse3 {
+          0%, 100% { transform: scale(1); opacity: 0.6; }
+          50% { transform: scale(1.1); opacity: 0.8; }
+        }
+
+        @keyframes corner-pulse4 {
+          0%, 100% { transform: scale(1); opacity: 0.6; }
+          50% { transform: scale(1.1); opacity: 0.8; }
         }
       `}</style>
     </div>
