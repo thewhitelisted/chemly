@@ -1,36 +1,15 @@
 import type { MoleculeGraph, Atom, Bond } from '../models/MoleculeGraph';
+import type { ElementSymbol } from '../types/chemistry';
 import { v4 as uuidv4 } from 'uuid';
-
-// Valence electrons for common elements
-const ELEMENT_VALENCE: Record<string, number> = {
-  H: 1,
-  C: 4,
-  N: 3,
-  O: 2,
-  P: 3,  // Common valence for phosphorus in organic chemistry
-  S: 2,  // Common valence for sulfur in organic chemistry
-  F: 1,
-  Cl: 1,
-  Br: 1,
-  I: 1,
-};
-
-// Bond order values for different bond types
-const BOND_ORDER: Record<string, number> = {
-  single: 1,
-  double: 2,
-  triple: 3,
-  wedge: 1,
-  dash: 1,
-};
+import { 
+  BOND_ORDER, 
+  getBestValenceForBondCount, 
+  getPreferredValence, 
+  canAcceptMoreBonds 
+} from './valenceDefinitions';
 
 // Ensure all elements in the toolbar are supported in valence logic
-const TOOLBAR_ELEMENTS = ['C','O','N','P','S','F','Cl','Br','I','H'];
-for (const el of TOOLBAR_ELEMENTS) {
-  if (!(el in ELEMENT_VALENCE)) {
-    throw new Error(`Element ${el} is used in the UI but not supported in valence logic. Please add it to ELEMENT_VALENCE.`);
-  }
-}
+const TOOLBAR_ELEMENTS: ElementSymbol[] = ['C','O','N','P','S','F','Cl','Br','I','H'];
 
 export class HydrogenManager {
   /**
@@ -46,35 +25,38 @@ export class HydrogenManager {
   }
 
   /**
-   * Get all hydrogen atoms connected to a specific atom
+   * Get atoms connected to a specific atom (excluding hydrogens for positioning)
    */
-  private static getConnectedHydrogens(atomId: string, graph: MoleculeGraph): Atom[] {
-    const hydrogenIds = new Set<string>();
-    
-    graph.bonds.forEach(bond => {
-      let connectedAtomId: string | null = null;
-      
-      if (bond.sourceAtomId === atomId) {
-        connectedAtomId = bond.targetAtomId;
-      } else if (bond.targetAtomId === atomId) {
-        connectedAtomId = bond.sourceAtomId;
-      }
-      
-      if (connectedAtomId) {
-        const connectedAtom = graph.atoms.find(a => a.id === connectedAtomId);
-        if (connectedAtom && connectedAtom.element === 'H') {
-          hydrogenIds.add(connectedAtomId);
-        }
-      }
-    });
-    
-    return graph.atoms.filter(atom => hydrogenIds.has(atom.id));
+  private static getConnectedAtoms(atomId: string, graph: MoleculeGraph, excludeHydrogens: boolean = true): Atom[] {
+    return graph.bonds
+      .filter(bond => (bond.sourceAtomId === atomId || bond.targetAtomId === atomId))
+      .map(bond => {
+        const otherAtomId = bond.sourceAtomId === atomId ? bond.targetAtomId : bond.sourceAtomId;
+        return graph.atoms.find(a => a.id === otherAtomId);
+      })
+      .filter(atom => atom && (!excludeHydrogens || atom.element !== 'H')) as Atom[];
   }
 
   /**
-   * Remove hydrogen atoms and their bonds from the graph
+   * Get hydrogen atoms connected to a specific atom
    */
-  private static removeHydrogens(hydrogenIds: string[], graph: MoleculeGraph): MoleculeGraph {
+  private static getConnectedHydrogens(atomId: string, graph: MoleculeGraph): Atom[] {
+    return graph.bonds
+      .filter(bond => (bond.sourceAtomId === atomId || bond.targetAtomId === atomId))
+      .map(bond => {
+        const otherAtomId = bond.sourceAtomId === atomId ? bond.targetAtomId : bond.sourceAtomId;
+        return graph.atoms.find(a => a.id === otherAtomId);
+      })
+      .filter(atom => atom && atom.element === 'H') as Atom[];
+  }
+
+  /**
+   * Remove all hydrogen atoms connected to a specific atom
+   */
+  private static removeHydrogensFromAtom(atomId: string, graph: MoleculeGraph): MoleculeGraph {
+    const hydrogens = this.getConnectedHydrogens(atomId, graph);
+    const hydrogenIds = hydrogens.map(h => h.id);
+
     return {
       atoms: graph.atoms.filter(atom => !hydrogenIds.includes(atom.id)),
       bonds: graph.bonds.filter(bond => 
@@ -88,12 +70,15 @@ export class HydrogenManager {
    * Add hydrogen atoms to complete an atom's valence
    */
   private static addHydrogensToAtom(atom: Atom, graph: MoleculeGraph): MoleculeGraph {
-    const valence = ELEMENT_VALENCE[atom.element];
-    if (!valence) return graph;
+    // Skip hydrogen atoms
+    if (atom.element === 'H') return graph;
 
     const currentBonds = this.getCurrentBondCount(atom.id, graph);
-    const neededHydrogens = Math.max(0, valence - currentBonds);
+    const targetValence = getBestValenceForBondCount(atom.element as ElementSymbol, currentBonds);
+    
+    if (!targetValence) return graph;
 
+    const neededHydrogens = Math.max(0, targetValence - currentBonds);
     if (neededHydrogens === 0) return graph;
 
     const newHydrogens: Atom[] = [];
@@ -101,22 +86,33 @@ export class HydrogenManager {
     const hydrogenDistance = 30;
 
     // Find angles of all existing bonds (to non-hydrogen atoms)
-    const bondedAtoms = graph.bonds
-      .filter(bond => (bond.sourceAtomId === atom.id || bond.targetAtomId === atom.id))
-      .map(bond => {
-        const otherAtomId = bond.sourceAtomId === atom.id ? bond.targetAtomId : bond.sourceAtomId;
-        return graph.atoms.find(a => a.id === otherAtomId);
-      })
-      .filter(a => a && a.element !== 'H') as Atom[];
+    const bondedAtoms = this.getConnectedAtoms(atom.id, graph, true);
     const bondAngles = bondedAtoms.map(a => Math.atan2(a.position.y - atom.position.y, a.position.x - atom.position.x));
     bondAngles.sort((a, b) => a - b);
 
     let hydrogenAngles: number[] = [];
-    if (bondedAtoms.length === 2) {
-      // Place hydrogens in the largest angular gap between the two bonds, spaced evenly
+    
+    if (bondedAtoms.length === 0) {
+      // No bonds: space hydrogens evenly around atom
+      for (let i = 0; i < neededHydrogens; i++) {
+        hydrogenAngles.push((2 * Math.PI * i) / neededHydrogens);
+      }
+    } else if (bondedAtoms.length === 1) {
+      // One bond: place hydrogens opposite or at angles
+      const bondAngle = bondAngles[0];
+      if (neededHydrogens === 1) {
+        hydrogenAngles.push(bondAngle + Math.PI);
+      } else {
+        // Multiple hydrogens: spread them around avoiding the bond
+        for (let i = 0; i < neededHydrogens; i++) {
+          const angle = bondAngle + Math.PI + ((i - (neededHydrogens - 1) / 2) * Math.PI / 3);
+          hydrogenAngles.push(angle);
+        }
+      }
+    } else if (bondedAtoms.length === 2) {
+      // Two bonds: place hydrogens in the largest angular gap
       const angle1 = bondAngles[0];
       const angle2 = bondAngles[1];
-      // Compute both gaps (wrap around 2π)
       let a1 = angle1;
       let a2 = angle2;
       if (a2 < a1) [a1, a2] = [a2, a1];
@@ -134,42 +130,23 @@ export class HydrogenManager {
         const hAngle = gapStart + ((i + 1) / (neededHydrogens + 1)) * gapSize;
         hydrogenAngles.push(hAngle);
       }
-    } else if (bondAngles.length === 0) {
-      // No bonds: space hydrogens evenly around atom
-      for (let i = 0; i < neededHydrogens; i++) {
-        hydrogenAngles.push((2 * Math.PI * i) / neededHydrogens);
-      }
     } else {
-      // Find all angular gaps between bonds
+      // Three or more bonds: find gaps and place hydrogens
       const allAngles = [...bondAngles, bondAngles[0] + 2 * Math.PI];
-      let gaps: { start: number; end: number; size: number }[] = [];
+      let largestGap = 0;
+      let gapStart = 0;
+      
       for (let i = 0; i < bondAngles.length; i++) {
-        const start = bondAngles[i];
-        const end = allAngles[i + 1];
-        let size = end - start;
-        if (size < 0) size += 2 * Math.PI;
-        gaps.push({ start, end, size });
-      }
-      // Sort gaps by size descending
-      gaps.sort((a, b) => b.size - a.size);
-      // Distribute hydrogens as evenly as possible among the gaps
-      const hydrogensPerGap = new Array(gaps.length).fill(0);
-      for (let i = 0; i < neededHydrogens; i++) {
-        hydrogensPerGap[i % gaps.length]++;
-      }
-      // For each gap, place hydrogens evenly within the gap
-      let hydrogenIdx = 0;
-      for (let gapIdx = 0; gapIdx < gaps.length; gapIdx++) {
-        const gap = gaps[gapIdx];
-        const count = hydrogensPerGap[gapIdx];
-        for (let j = 0; j < count; j++) {
-          // Evenly space within the gap (not at the very edge)
-          const angle = gap.start + ((j + 1) / (count + 1)) * gap.size;
-          let normAngle = angle;
-          if (normAngle < 0) normAngle += 2 * Math.PI;
-          if (normAngle >= 2 * Math.PI) normAngle -= 2 * Math.PI;
-          hydrogenAngles[hydrogenIdx++] = normAngle;
+        const gap = allAngles[i + 1] - allAngles[i];
+        if (gap > largestGap) {
+          largestGap = gap;
+          gapStart = allAngles[i];
         }
+      }
+      
+      for (let i = 0; i < neededHydrogens; i++) {
+        const hAngle = gapStart + ((i + 1) / (neededHydrogens + 1)) * largestGap;
+        hydrogenAngles.push(hAngle % (2 * Math.PI));
       }
     }
 
@@ -204,44 +181,74 @@ export class HydrogenManager {
   }
 
   /**
-   * Update hydrogens for a specific atom
-   */
-  static updateHydrogensForAtom(atomId: string, graph: MoleculeGraph): MoleculeGraph {
-    const atom = graph.atoms.find(a => a.id === atomId);
-    if (!atom || atom.element === 'H') return graph;
-
-    // Remove existing hydrogens
-    const existingHydrogens = this.getConnectedHydrogens(atomId, graph);
-    const hydrogenIds = existingHydrogens.map(h => h.id);
-    let updatedGraph = this.removeHydrogens(hydrogenIds, graph);
-
-    // Add new hydrogens to complete valence
-    updatedGraph = this.addHydrogensToAtom(atom, updatedGraph);
-
-    return updatedGraph;
-  }
-
-  /**
-   * Update hydrogens for multiple atoms
+   * Update hydrogens for specific atoms
    */
   static updateHydrogensForAtoms(atomIds: string[], graph: MoleculeGraph): MoleculeGraph {
     let updatedGraph = graph;
     
     for (const atomId of atomIds) {
-      updatedGraph = this.updateHydrogensForAtom(atomId, updatedGraph);
+      const atom = updatedGraph.atoms.find(a => a.id === atomId);
+      if (!atom || atom.element === 'H') continue;
+      
+      // Remove existing hydrogens first
+      updatedGraph = this.removeHydrogensFromAtom(atomId, updatedGraph);
+      
+      // Add new hydrogens based on current valence state
+      updatedGraph = this.addHydrogensToAtom(atom, updatedGraph);
     }
     
     return updatedGraph;
   }
 
   /**
-   * Add hydrogens to all non-hydrogen atoms in the graph
+   * Fill valences for all non-hydrogen atoms
    */
   static fillAllValences(graph: MoleculeGraph): MoleculeGraph {
     const nonHydrogenAtoms = graph.atoms.filter(atom => atom.element !== 'H');
     const atomIds = nonHydrogenAtoms.map(atom => atom.id);
-    
     return this.updateHydrogensForAtoms(atomIds, graph);
+  }
+
+  /**
+   * Check if a bond can be created between two atoms
+   */
+  static canCreateBond(sourceAtomId: string, targetAtomId: string, graph: MoleculeGraph, bondOrder: number = 1): boolean {
+    const sourceAtom = graph.atoms.find(a => a.id === sourceAtomId);
+    const targetAtom = graph.atoms.find(a => a.id === targetAtomId);
+    
+    if (!sourceAtom || !targetAtom) return false;
+    
+    // Don't allow bonds to self
+    if (sourceAtomId === targetAtomId) return false;
+    
+    // Check if bond already exists
+    const existingBond = graph.bonds.find(bond =>
+      (bond.sourceAtomId === sourceAtomId && bond.targetAtomId === targetAtomId) ||
+      (bond.sourceAtomId === targetAtomId && bond.targetAtomId === sourceAtomId)
+    );
+    
+    if (existingBond) {
+      // Bond exists, check if we can increase its order
+      const currentOrder = BOND_ORDER[existingBond.type];
+      const newOrder = currentOrder + bondOrder;
+      
+      const sourceCurrentBonds = this.getCurrentBondCount(sourceAtomId, graph);
+      const targetCurrentBonds = this.getCurrentBondCount(targetAtomId, graph);
+      
+      // Calculate what the new bond counts would be
+      const sourceNewBonds = sourceCurrentBonds - currentOrder + newOrder;
+      const targetNewBonds = targetCurrentBonds - currentOrder + newOrder;
+      
+      return canAcceptMoreBonds(sourceAtom.element as ElementSymbol, sourceNewBonds - bondOrder, bondOrder) &&
+             canAcceptMoreBonds(targetAtom.element as ElementSymbol, targetNewBonds - bondOrder, bondOrder);
+    } else {
+      // New bond
+      const sourceCurrentBonds = this.getCurrentBondCount(sourceAtomId, graph);
+      const targetCurrentBonds = this.getCurrentBondCount(targetAtomId, graph);
+      
+      return canAcceptMoreBonds(sourceAtom.element as ElementSymbol, sourceCurrentBonds, bondOrder) &&
+             canAcceptMoreBonds(targetAtom.element as ElementSymbol, targetCurrentBonds, bondOrder);
+    }
   }
 
   /**
@@ -275,47 +282,37 @@ export class HydrogenManager {
   }
 
   /**
-   * Handle atom deletion - remove atom and update connected atoms
+   * Handle atom deletion - remove atom, connected hydrogens, and update remaining connected atoms
    */
-  static onAtomDeleted(deletedAtomId: string, graph: MoleculeGraph): MoleculeGraph {
-    // Find all atoms that were connected to the deleted atom
-    const connectedAtomIds = new Set<string>();
-    const hydrogenAtomsToDelete = new Set<string>();
-    
-    graph.bonds.forEach(bond => {
-      if (bond.sourceAtomId === deletedAtomId) {
-        connectedAtomIds.add(bond.targetAtomId);
-        // If the connected atom is hydrogen, mark it for deletion
-        const connectedAtom = graph.atoms.find(a => a.id === bond.targetAtomId);
-        if (connectedAtom && connectedAtom.element === 'H') {
-          hydrogenAtomsToDelete.add(bond.targetAtomId);
-        }
-      } else if (bond.targetAtomId === deletedAtomId) {
-        connectedAtomIds.add(bond.sourceAtomId);
-        // If the connected atom is hydrogen, mark it for deletion
-        const connectedAtom = graph.atoms.find(a => a.id === bond.sourceAtomId);
-        if (connectedAtom && connectedAtom.element === 'H') {
-          hydrogenAtomsToDelete.add(bond.sourceAtomId);
-        }
-      }
+  static onAtomDeleted(atomId: string, graph: MoleculeGraph): MoleculeGraph {
+    // Find all atoms that were bonded to the deleted atom
+    const connectedAtomIds = graph.bonds
+      .filter(bond => bond.sourceAtomId === atomId || bond.targetAtomId === atomId)
+      .map(bond => bond.sourceAtomId === atomId ? bond.targetAtomId : bond.sourceAtomId)
+      .filter(id => id !== atomId);
+
+    // Separate hydrogen and non-hydrogen connected atoms
+    const connectedHydrogenIds = connectedAtomIds.filter(id => {
+      const atom = graph.atoms.find(a => a.id === id);
+      return atom && atom.element === 'H';
     });
-
-    // Remove the atom, connected hydrogens, and all related bonds
-    const atomsToDelete = new Set([deletedAtomId, ...hydrogenAtomsToDelete]);
-    const updatedGraph: MoleculeGraph = {
-      atoms: graph.atoms.filter(atom => !atomsToDelete.has(atom.id)),
-      bonds: graph.bonds.filter(bond => 
-        !atomsToDelete.has(bond.sourceAtomId) && 
-        !atomsToDelete.has(bond.targetAtomId)
-      )
-    };
-
-    // Update hydrogens for remaining non-hydrogen atoms that were connected to the deleted atom
-    const nonHydrogenConnectedAtoms = Array.from(connectedAtomIds).filter(atomId => {
-      const atom = updatedGraph.atoms.find(a => a.id === atomId);
+    
+    const connectedNonHydrogenIds = connectedAtomIds.filter(id => {
+      const atom = graph.atoms.find(a => a.id === id);
       return atom && atom.element !== 'H';
     });
 
-    return this.updateHydrogensForAtoms(nonHydrogenConnectedAtoms, updatedGraph);
+    // Remove the atom, connected hydrogens, and all related bonds
+    const atomsToRemove = [atomId, ...connectedHydrogenIds];
+    const updatedGraph = {
+      atoms: graph.atoms.filter(atom => !atomsToRemove.includes(atom.id)),
+      bonds: graph.bonds.filter(bond => 
+        !atomsToRemove.includes(bond.sourceAtomId) && 
+        !atomsToRemove.includes(bond.targetAtomId)
+      )
+    };
+
+    // Update hydrogens for remaining non-hydrogen atoms that lost a bond
+    return this.updateHydrogensForAtoms(connectedNonHydrogenIds, updatedGraph);
   }
 }

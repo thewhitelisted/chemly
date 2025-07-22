@@ -1,32 +1,10 @@
 import type { MoleculeGraph, Atom, ValidationWarning, MoleculeValidation } from '../models/MoleculeGraph';
+import type { ElementSymbol } from '../types/chemistry';
 import { MoleculeGraphUtils } from '../models/MoleculeGraph';
-
-// Standard valences for common elements
-const ELEMENT_VALENCES: Record<string, number[]> = {
-  'H': [1],
-  'C': [4],
-  'N': [3, 5],
-  'O': [2],
-  'P': [3, 5],
-  'S': [2, 4, 6],
-  'F': [1],
-  'Cl': [1, 3, 5, 7],
-  'Br': [1, 3, 5, 7],
-  'I': [1, 3, 5, 7]
-};
+import { ELEMENT_VALENCES, BOND_ORDER, getPossibleValences, isValidValence } from './valenceDefinitions';
 
 function getBondOrder(bondType: string): number {
-  switch (bondType) {
-    case 'single':
-    case 'wedge':
-      return 1;
-    case 'double':
-      return 2;
-    case 'triple':
-      return 3;
-    default:
-      return 1;
-  }
+  return BOND_ORDER[bondType] || 1;
 }
 
 function calculateAtomValence(graph: MoleculeGraph, atom: Atom): number {
@@ -36,9 +14,9 @@ function calculateAtomValence(graph: MoleculeGraph, atom: Atom): number {
 
 function validateAtomValence(graph: MoleculeGraph, atom: Atom): ValidationWarning[] {
   const warnings: ValidationWarning[] = [];
-  const expectedValences = ELEMENT_VALENCES[atom.element];
+  const expectedValences = getPossibleValences(atom.element as ElementSymbol);
   
-  if (!expectedValences) {
+  if (expectedValences.length === 0) {
     // Unknown element
     warnings.push({
       id: `unknown-element-${atom.id}`,
@@ -54,7 +32,7 @@ function validateAtomValence(graph: MoleculeGraph, atom: Atom): ValidationWarnin
   const implicitH = atom.implicitHydrogens || 0;
   const totalValence = actualValence + implicitH;
 
-  if (!expectedValences.includes(totalValence)) {
+  if (!isValidValence(atom.element as ElementSymbol, totalValence)) {
     const expectedStr = expectedValences.length === 1 
       ? expectedValences[0].toString()
       : expectedValences.join(' or ');
@@ -98,12 +76,13 @@ function validateConnectivity(graph: MoleculeGraph): ValidationWarning[] {
 function validateCharges(graph: MoleculeGraph): ValidationWarning[] {
   const warnings: ValidationWarning[] = [];
   
+  // Check for unreasonable formal charges
   graph.atoms.forEach(atom => {
     if (atom.charge && Math.abs(atom.charge) > 3) {
       warnings.push({
-        id: `high-charge-${atom.id}`,
+        id: `charge-${atom.id}`,
         type: 'charge',
-        message: `Unusual charge: ${atom.element}${atom.charge > 0 ? '+' : ''}${atom.charge}`,
+        message: `Unusual formal charge (${atom.charge > 0 ? '+' : ''}${atom.charge}) on ${atom.element}`,
         atomIds: [atom.id],
         severity: 'warning'
       });
@@ -117,22 +96,30 @@ function validateGeometry(graph: MoleculeGraph): ValidationWarning[] {
   const warnings: ValidationWarning[] = [];
   
   // Check for overlapping atoms
-  for (let i = 0; i < graph.atoms.length; i++) {
-    for (let j = i + 1; j < graph.atoms.length; j++) {
-      const atom1 = graph.atoms[i];
-      const atom2 = graph.atoms[j];
+  const atomPositions = new Map<string, {x: number, y: number}>();
+  graph.atoms.forEach(atom => {
+    atomPositions.set(atom.id, atom.position);
+  });
+
+  const atoms = Array.from(atomPositions.entries());
+  for (let i = 0; i < atoms.length; i++) {
+    for (let j = i + 1; j < atoms.length; j++) {
+      const [id1, pos1] = atoms[i];
+      const [id2, pos2] = atoms[j];
       
       const distance = Math.sqrt(
-        Math.pow(atom1.position.x - atom2.position.x, 2) +
-        Math.pow(atom1.position.y - atom2.position.y, 2)
+        Math.pow(pos1.x - pos2.x, 2) + Math.pow(pos1.y - pos2.y, 2)
       );
       
-      if (distance < 10) { // Atoms too close (less than 10 pixels)
+      if (distance < 5) { // Very close atoms
+        const atom1 = graph.atoms.find(a => a.id === id1);
+        const atom2 = graph.atoms.find(a => a.id === id2);
+        
         warnings.push({
-          id: `overlap-${atom1.id}-${atom2.id}`,
+          id: `overlap-${id1}-${id2}`,
           type: 'geometry',
-          message: `Atoms too close: ${atom1.element} and ${atom2.element}`,
-          atomIds: [atom1.id, atom2.id],
+          message: `Atoms ${atom1?.element} and ${atom2?.element} are overlapping`,
+          atomIds: [id1, id2],
           severity: 'warning'
         });
       }
@@ -168,8 +155,8 @@ export function validateStructure(graph: MoleculeGraph): MoleculeValidation {
 }
 
 export function calculateImplicitHydrogens(graph: MoleculeGraph, atom: Atom): number {
-  const expectedValences = ELEMENT_VALENCES[atom.element];
-  if (!expectedValences) return 0;
+  const expectedValences = getPossibleValences(atom.element as ElementSymbol);
+  if (expectedValences.length === 0) return 0;
 
   const actualValence = calculateAtomValence(graph, atom);
   const primaryValence = expectedValences[0]; // Use primary valence

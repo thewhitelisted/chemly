@@ -524,7 +524,7 @@ export function ChemCanvas({
               newBondType = 'single';
           }
           
-          // Update bond type
+          // For now, allow bond type changes (validation could be enhanced in the future)
           const updatedBonds = molecule.bonds.map(bond =>
             bond.id === clickedBond.id
               ? { ...bond, type: newBondType }
@@ -894,19 +894,24 @@ export function ChemCanvas({
               (bond.sourceAtomId === existingAtom.id && bond.targetAtomId === startAtom.id)
           );
           if (!existingBond) {
-            // Create new bond to existing atom
-            const newBond: Bond = {
-              id: uuidv4(),
-              sourceAtomId: startAtom.id,
-              targetAtomId: existingAtom.id,
-              type: 'single',
-            };
-            const moleculeWithBond = {
-              ...molecule,
-              bonds: [...molecule.bonds, newBond],
-            };
-            const finalMolecule = HydrogenManager.onBondCreated(newBond, moleculeWithBond);
-            onMoleculeChange(finalMolecule);
+            // Check if bond can be created
+            if (HydrogenManager.canCreateBond(startAtom.id, existingAtom.id, molecule)) {
+              // Create new bond to existing atom
+              const newBond: Bond = {
+                id: uuidv4(),
+                sourceAtomId: startAtom.id,
+                targetAtomId: existingAtom.id,
+                type: 'single',
+              };
+              const moleculeWithBond = {
+                ...molecule,
+                bonds: [...molecule.bonds, newBond],
+              };
+              const finalMolecule = HydrogenManager.onBondCreated(newBond, moleculeWithBond);
+              onMoleculeChange(finalMolecule);
+            } else {
+              console.log('Cannot create bond: would exceed valence limits');
+            }
           }
         } else {
           // Create new atom at the drop position

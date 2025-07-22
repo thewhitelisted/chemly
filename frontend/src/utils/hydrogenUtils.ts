@@ -1,28 +1,12 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { Molecule, Atom, Bond, ElementSymbol } from '../types/chemistry';
-
-// Valence electrons for common elements
-const ELEMENT_VALENCE: Record<ElementSymbol, number> = {
-  H: 1,
-  C: 4,
-  N: 3,
-  O: 2,
-  P: 5,
-  S: 6,
-  F: 1,
-  Cl: 1,
-  Br: 1,
-  I: 1,
-};
-
-// Bond order values for different bond types
-const BOND_ORDER: Record<string, number> = {
-  single: 1,
-  double: 2,
-  triple: 3,
-  wedge: 1,
-  dash: 1,
-};
+import { 
+  BOND_ORDER, 
+  getBestValenceForBondCount, 
+  getPreferredValence, 
+  canAcceptMoreBonds,
+  getPossibleValences 
+} from './valenceDefinitions';
 
 /**
  * Calculate how many bonds an atom currently has
@@ -40,36 +24,40 @@ export function getAtomBondCount(atomId: string, bonds: Bond[]): number {
 }
 
 /**
- * Calculate how many hydrogen atoms an atom needs to complete its valence
+ * Calculate how many additional hydrogens an atom needs to satisfy its preferred valence
  */
 export function getRequiredHydrogens(atom: Atom, bonds: Bond[]): number {
-  const valence = ELEMENT_VALENCE[atom.element as ElementSymbol];
-  if (!valence) return 0;
-  
   const currentBonds = getAtomBondCount(atom.id, bonds);
-  const neededHydrogens = Math.max(0, valence - currentBonds);
+  const targetValence = getBestValenceForBondCount(atom.element as ElementSymbol, currentBonds);
   
-  return neededHydrogens;
+  if (!targetValence) return 0;
+  return Math.max(0, targetValence - currentBonds);
 }
 
 /**
  * Get all hydrogen atoms connected to a specific atom
  */
 export function getConnectedHydrogens(atomId: string, molecule: Molecule): Atom[] {
-  const hydrogenIds = molecule.bonds
-    .filter(bond => {
-      const isConnected = bond.sourceAtomId === atomId || bond.targetAtomId === atomId;
-      if (!isConnected) return false;
-      
-      const otherAtomId = bond.sourceAtomId === atomId ? bond.targetAtomId : bond.sourceAtomId;
-      const otherAtom = molecule.atoms.find(atom => atom.id === otherAtomId);
-      return otherAtom?.element === 'H';
-    })
-    .map(bond => bond.sourceAtomId === atomId ? bond.targetAtomId : bond.sourceAtomId);
+  const hydrogenIds = new Set<string>();
   
-  const result = molecule.atoms.filter(atom => hydrogenIds.includes(atom.id));
+  molecule.bonds.forEach(bond => {
+    let connectedAtomId: string | null = null;
+    
+    if (bond.sourceAtomId === atomId) {
+      connectedAtomId = bond.targetAtomId;
+    } else if (bond.targetAtomId === atomId) {
+      connectedAtomId = bond.sourceAtomId;
+    }
+    
+    if (connectedAtomId) {
+      const connectedAtom = molecule.atoms.find(a => a.id === connectedAtomId);
+      if (connectedAtom && connectedAtom.element === 'H') {
+        hydrogenIds.add(connectedAtomId);
+      }
+    }
+  });
   
-  return result;
+  return molecule.atoms.filter(atom => hydrogenIds.has(atom.id));
 }
 
 /**
@@ -121,7 +109,7 @@ export function addSpecificHydrogens(atom: Atom, molecule: Molecule, numberOfHyd
 }
 
 /**
- * Add hydrogen atoms to complete valence for a newly created atom
+ * Add hydrogen atoms to an atom based on its preferred valence
  */
 export function addHydrogensToAtom(atom: Atom, molecule: Molecule): Molecule {
   const neededHydrogens = getRequiredHydrogens(atom, molecule.bonds);
@@ -137,10 +125,12 @@ export function updateHydrogensAfterBonding(atomId: string, molecule: Molecule):
   
   const connectedHydrogens = getConnectedHydrogens(atomId, molecule);
   const currentBonds = getAtomBondCount(atomId, molecule.bonds);
-  const valence = ELEMENT_VALENCE[atom.element as ElementSymbol] || 0;
+  const targetValence = getBestValenceForBondCount(atom.element as ElementSymbol, currentBonds);
+  
+  if (!targetValence) return molecule;
   
   // Calculate how many hydrogens we need to remove
-  const excessHydrogens = Math.max(0, currentBonds - valence);
+  const excessHydrogens = Math.max(0, currentBonds - targetValence);
   const hydrogensToRemove = Math.min(excessHydrogens, connectedHydrogens.length);
   
   if (hydrogensToRemove <= 0) {
@@ -176,42 +166,19 @@ export function updateMoleculeAfterBonding(sourceAtomId: string, targetAtomId: s
 }
 
 /**
- * Remove an atom and all hydrogen atoms connected to it, then restore hydrogens to affected atoms
+ * Check if two atoms can be bonded together
  */
-export function removeAtomWithHydrogens(atomId: string, molecule: Molecule): Molecule {
-  const atomToRemove = molecule.atoms.find(a => a.id === atomId);
-  if (!atomToRemove) return molecule;
+export function canBondAtoms(sourceAtomId: string, targetAtomId: string, molecule: Molecule, bondOrder: number = 1): boolean {
+  const sourceAtom = molecule.atoms.find(a => a.id === sourceAtomId);
+  const targetAtom = molecule.atoms.find(a => a.id === targetAtomId);
   
-  // Find all atoms that were bonded to the atom being removed (excluding hydrogens)
-  const connectedAtomIds = molecule.bonds
-    .filter(bond => bond.sourceAtomId === atomId || bond.targetAtomId === atomId)
-    .map(bond => bond.sourceAtomId === atomId ? bond.targetAtomId : bond.sourceAtomId)
-    .filter(connectedId => {
-      const connectedAtom = molecule.atoms.find(a => a.id === connectedId);
-      return connectedAtom && connectedAtom.element !== 'H'; // Only non-hydrogen atoms
-    });
+  if (!sourceAtom || !targetAtom) return false;
   
-  // Get all hydrogen atoms connected to this atom
-  const connectedHydrogens = getConnectedHydrogens(atomId, molecule);
-  const hydrogenIds = connectedHydrogens.map(h => h.id);
+  const sourceCurrentBonds = getAtomBondCount(sourceAtomId, molecule.bonds);
+  const targetCurrentBonds = getAtomBondCount(targetAtomId, molecule.bonds);
   
-  // Remove the main atom and all connected hydrogens
-  const atomsToRemove = [atomId, ...hydrogenIds];
-  
-  let updatedMolecule = {
-    atoms: molecule.atoms.filter(atom => !atomsToRemove.includes(atom.id)),
-    bonds: molecule.bonds.filter(bond => 
-      !atomsToRemove.includes(bond.sourceAtomId) && 
-      !atomsToRemove.includes(bond.targetAtomId)
-    ),
-  };
-  
-  // Now restore hydrogens to all atoms that lost a bond
-  for (const connectedAtomId of connectedAtomIds) {
-    updatedMolecule = updateHydrogensAfterBondRemoval(connectedAtomId, updatedMolecule);
-  }
-  
-  return updatedMolecule;
+  return canAcceptMoreBonds(sourceAtom.element as ElementSymbol, sourceCurrentBonds, bondOrder) &&
+         canAcceptMoreBonds(targetAtom.element as ElementSymbol, targetCurrentBonds, bondOrder);
 }
 
 /**
