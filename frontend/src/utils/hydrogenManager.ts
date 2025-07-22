@@ -130,15 +130,9 @@ export class HydrogenManager {
         gapStart = a2;
         gapSize = gap2;
       }
-      // Debug logging
-      console.log(`HydrogenManager: atom ${atom.id} (${atom.element})`);
-      console.log(`  Bond angles: ${angle1.toFixed(2)}, ${angle2.toFixed(2)}`);
-      console.log(`  Gaps: gap1=${gap1.toFixed(2)}, gap2=${gap2.toFixed(2)}`);
-      console.log(`  Chosen gap: start=${gapStart.toFixed(2)}, size=${gapSize.toFixed(2)}`);
       for (let i = 0; i < neededHydrogens; i++) {
         const hAngle = gapStart + ((i + 1) / (neededHydrogens + 1)) * gapSize;
         hydrogenAngles.push(hAngle);
-        console.log(`  Hydrogen ${i + 1}: angle=${hAngle.toFixed(2)}`);
       }
     } else if (bondAngles.length === 0) {
       // No bonds: space hydrogens evenly around atom
@@ -305,8 +299,6 @@ export class HydrogenManager {
         }
       }
     });
-
-    console.log(`Deleting atom ${deletedAtomId} and ${hydrogenAtomsToDelete.size} connected hydrogens`);
 
     // Remove the atom, connected hydrogens, and all related bonds
     const atomsToDelete = new Set([deletedAtomId, ...hydrogenAtomsToDelete]);

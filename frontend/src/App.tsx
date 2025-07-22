@@ -8,24 +8,21 @@ import Pricing from './components/Pricing';
 import { ChemCanvas } from './components/ChemCanvas';
 import { Toolbar } from './components/Toolbar';
 import { Sidebar } from './components/Sidebar';
-import type { DrawingState, ElementSymbol, Molecule, Point } from './types/chemistry';
+import type { ElementSymbol, Molecule, Point } from './types/chemistry';
 import { graphToOclMolecule, oclMoleculeToGraph } from './utils/oclGraphAdapter';
 import * as OCL from 'openchemlib';
 import { HydrogenManager } from './utils/hydrogenManager';
 import Navbar from './components/Navbar';
 import ScrollToTop from './components/ScrollToTop';
 
+import { useHistory } from './hooks/useHistory';
+
 function App() {
-  const [drawingState, setDrawingState] = useState<DrawingState>({
-    molecule: {
-      atoms: [],
-      bonds: []
-    },
-    selectedTool: 'select',
-    selectedElement: 'C',
-    canvasOffset: { x: 0, y: 0 },
-    scale: 1
-  });
+  const { state: molecule, setState: setMolecule, undo, redo, canUndo, canRedo } = useHistory<Molecule>({ atoms: [], bonds: [] });
+  const [selectedTool, setSelectedTool] = useState<'select' | 'atom' | 'eraser' | 'pan'>('select');
+  const [selectedElement, setSelectedElement] = useState<ElementSymbol>('C');
+  const [canvasOffset, setCanvasOffset] = useState<Point>({ x: 0, y: 0 });
+  const [scale, setScale] = useState(1);
 
   // Dark mode state
   const [darkMode, setDarkMode] = useState(() => {
@@ -43,15 +40,27 @@ function App() {
       document.body.classList.remove('dark');
       localStorage.setItem('theme', 'light');
     }
-  }, [darkMode]);
 
-  const updateDrawingState = (updates: Partial<DrawingState>) => {
-    setDrawingState(prev => ({ ...prev, ...updates }));
-  };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if (e.ctrlKey && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        redo();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [darkMode, undo, redo]);
 
   const handleCleanStructure = () => {
     // Convert to OCL, roundtrip through SMILES to normalize, then back to graph
-    const oclMol = graphToOclMolecule(drawingState.molecule);
+    const oclMol = graphToOclMolecule(molecule);
     const smiles = oclMol.toSmiles();
     const cleanedMol = OCL.Molecule.fromSmiles(smiles);
     let cleanedGraph = oclMoleculeToGraph(cleanedMol);
@@ -64,7 +73,7 @@ function App() {
         atom.element === 'H' ? atom : { ...atom, implicitHydrogens: 0 }
       ),
     };
-    updateDrawingState({ molecule: cleanedGraph });
+    setMolecule(cleanedGraph);
   };
 
   return (
@@ -75,26 +84,36 @@ function App() {
         <Route path="/app" element={
           <div className="flex h-screen bg-white dark:bg-zinc-900 transition-colors">
             <Toolbar
-              selectedElement={drawingState.selectedElement}
-              selectedTool={drawingState.selectedTool}
-              onElementSelect={el => updateDrawingState({ selectedElement: el, selectedTool: 'atom' })}
-              onToolSelect={tool => updateDrawingState({ selectedTool: tool })}
+              selectedElement={selectedElement}
+              selectedTool={selectedTool}
+              onElementSelect={el => {
+                setSelectedElement(el);
+                setSelectedTool('atom');
+              }}
+              onToolSelect={setSelectedTool}
               onCleanStructure={handleCleanStructure}
               darkMode={darkMode}
               onToggleDarkMode={() => setDarkMode(dm => !dm)}
             />
             <ChemCanvas
-              molecule={drawingState.molecule}
-              selectedTool={drawingState.selectedTool}
-              selectedElement={drawingState.selectedElement}
-              canvasOffset={drawingState.canvasOffset}
-              scale={drawingState.scale}
-              onMoleculeChange={(molecule: Molecule) => updateDrawingState({ molecule })}
-              onCanvasTransformChange={(canvasOffset: Point, scale: number) => updateDrawingState({ canvasOffset, scale })}
+              molecule={molecule}
+              selectedTool={selectedTool}
+              selectedElement={selectedElement}
+              canvasOffset={canvasOffset}
+              scale={scale}
+              onMoleculeChange={setMolecule}
+              onCanvasTransformChange={(offset, newScale) => {
+                setCanvasOffset(offset);
+                setScale(newScale);
+              }}
+              undo={undo}
+              redo={redo}
+              canUndo={canUndo}
+              canRedo={canRedo}
             />
             <Sidebar
-              molecule={drawingState.molecule}
-              onMoleculeChange={(molecule: Molecule) => updateDrawingState({ molecule })}
+              molecule={molecule}
+              onMoleculeChange={setMolecule}
             />
           </div>
         } />

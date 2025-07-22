@@ -1,8 +1,7 @@
-import { useRef, useCallback, useState, useEffect } from 'react';
+import React, { useRef, useCallback, useState, useEffect, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import type { Molecule, Atom, Bond, Point, ElementSymbol, BondType } from '../types/chemistry';
 import { HydrogenManager } from '../utils/hydrogenManager';
-import { getAttachedHydrogens } from '../utils/oclGraphAdapter';
 
 interface ChemCanvasProps {
   molecule: Molecule;
@@ -12,6 +11,10 @@ interface ChemCanvasProps {
   scale: number;
   onMoleculeChange: (molecule: Molecule) => void;
   onCanvasTransformChange: (offset: Point, scale: number) => void;
+  undo: () => void;
+  redo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 const ATOM_RADIUS = 15;
@@ -70,6 +73,211 @@ function isColorLight(hex: string) {
   return luminance > 0.6;
 }
 
+// Memoized Bond component with stable props
+const MemoizedBond = React.memo(function MemoizedBond({ 
+  bond, 
+  atom1, 
+  atom2, 
+  isHoveredForErase 
+}: { 
+  bond: Bond; 
+  atom1: Atom; 
+  atom2: Atom; 
+  isHoveredForErase: boolean;
+}) {
+  const bondOffset = bond.type === 'double' ? 3 : bond.type === 'triple' ? 6 : 0;
+  
+  // Render highlight for eraser hover
+  const highlight = isHoveredForErase ? (
+    <line
+      x1={atom1.position.x}
+      y1={atom1.position.y}
+      x2={atom2.position.x}
+      y2={atom2.position.y}
+      stroke="#ef4444"
+      strokeWidth="8"
+      opacity="0.4"
+      pointerEvents="none"
+    />
+  ) : null;
+
+  if (bond.type === 'single') {
+    return (
+      <g>
+        {highlight}
+        <line
+          x1={atom1.position.x}
+          y1={atom1.position.y}
+          x2={atom2.position.x}
+          y2={atom2.position.y}
+          stroke="#374151"
+          strokeWidth="2"
+        />
+      </g>
+    );
+  }
+  
+  if (bond.type === 'double' || bond.type === 'triple') {
+    const dx = atom2.position.x - atom1.position.x;
+    const dy = atom2.position.y - atom1.position.y;
+    const length = Math.sqrt(dx * dx + dy * dy);
+    const offsetX = (-dy / length) * bondOffset;
+    const offsetY = (dx / length) * bondOffset;
+    
+    if (bond.type === 'double') {
+      return (
+        <g>
+          {highlight}
+          <line
+            x1={atom1.position.x + offsetX}
+            y1={atom1.position.y + offsetY}
+            x2={atom2.position.x + offsetX}
+            y2={atom2.position.y + offsetY}
+            stroke="#374151"
+            strokeWidth="2"
+          />
+          <line
+            x1={atom1.position.x - offsetX}
+            y1={atom1.position.y - offsetY}
+            x2={atom2.position.x - offsetX}
+            y2={atom2.position.y - offsetY}
+            stroke="#374151"
+            strokeWidth="2"
+          />
+        </g>
+      );
+    } else {
+      // triple
+      return (
+        <g>
+          {highlight}
+          <line
+            x1={atom1.position.x}
+            y1={atom1.position.y}
+            x2={atom2.position.x}
+            y2={atom2.position.y}
+            stroke="#374151"
+            strokeWidth="2"
+          />
+          <line
+            x1={atom1.position.x + offsetX}
+            y1={atom1.position.y + offsetY}
+            x2={atom2.position.x + offsetX}
+            y2={atom2.position.y + offsetY}
+            stroke="#374151"
+            strokeWidth="2"
+          />
+          <line
+            x1={atom1.position.x - offsetX}
+            y1={atom1.position.y - offsetY}
+            x2={atom2.position.x - offsetX}
+            y2={atom2.position.y - offsetY}
+            stroke="#374151"
+            strokeWidth="2"
+          />
+        </g>
+      );
+    }
+  }
+  
+  if (bond.type === 'wedge') {
+    const dx = atom2.position.x - atom1.position.x;
+    const dy = atom2.position.y - atom1.position.y;
+    const length = Math.sqrt(dx * dx + dy * dy);
+    const offsetX = (-dy / length) * 4;
+    const offsetY = (dx / length) * 4;
+    
+    return (
+      <g>
+        {highlight}
+        <polygon
+          points={`${atom1.position.x},${atom1.position.y} ${atom2.position.x + offsetX},${atom2.position.y + offsetY} ${atom2.position.x - offsetX},${atom2.position.y - offsetY}`}
+          fill="#374151"
+          stroke="#374151"
+          strokeWidth="1"
+        />
+      </g>
+    );
+  }
+  
+  if (bond.type === 'dash') {
+    return (
+      <g>
+        {highlight}
+        <line
+          x1={atom1.position.x}
+          y1={atom1.position.y}
+          x2={atom2.position.x}
+          y2={atom2.position.y}
+          stroke="#374151"
+          strokeWidth="2"
+          strokeDasharray="5,3"
+        />
+      </g>
+    );
+  }
+  
+  return null;
+});
+
+// Memoized Atom component with stable props
+const MemoizedAtom = React.memo(function MemoizedAtom({ 
+  atom, 
+  color, 
+  isSelected, 
+  isHovered, 
+  isDragged, 
+  isHoveredForErase,
+  textColor
+}: { 
+  atom: Atom; 
+  color: string; 
+  isSelected: boolean; 
+  isHovered: boolean; 
+  isDragged: boolean; 
+  isHoveredForErase: boolean;
+  textColor: string;
+}) {
+  return (
+    <g>
+      {/* Selection/hover/drag/eraser ring */}
+      {(isSelected || isHovered || isDragged || isHoveredForErase) && (
+        <circle
+          cx={atom.position.x}
+          cy={atom.position.y}
+          r={ATOM_RADIUS + 4}
+          fill="none"
+          stroke={isHoveredForErase ? "#ef4444" : (isSelected || isDragged ? "#3b82f6" : "#93c5fd")}
+          strokeWidth={isHoveredForErase ? 3 : 2}
+          strokeDasharray={isHovered && !isSelected ? "4,2" : undefined}
+          opacity="0.8"
+        />
+      )}
+      {/* Atom circle */}
+      <circle
+        cx={atom.position.x}
+        cy={atom.position.y}
+        r={ATOM_RADIUS}
+        fill={color}
+        stroke="white"
+        strokeWidth="2"
+      />
+      {/* Atom label */}
+      <text
+        x={atom.position.x}
+        y={atom.position.y}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize="12"
+        fontWeight="bold"
+        fill={textColor}
+      >
+        {atom.element}
+      </text>
+    </g>
+  );
+});
+
 export function ChemCanvas({
   molecule,
   selectedTool,
@@ -78,9 +286,28 @@ export function ChemCanvas({
   scale,
   onMoleculeChange,
   onCanvasTransformChange,
+  undo,
+  redo,
+  canUndo,
+  canRedo,
 }: ChemCanvasProps) {
   const darkMode = useDarkMode();
-  const elementColors = darkMode ? darkElementColors : lightElementColors;
+  const elementColors = useMemo(() => 
+    darkMode ? darkElementColors : lightElementColors, 
+    [darkMode]
+  );
+  
+  // Memoized atom map for fast lookups
+  const atomMap = useMemo(() => {
+    const map = new Map<string, Atom>();
+    molecule.atoms.forEach(atom => map.set(atom.id, atom));
+    return map;
+  }, [molecule.atoms]);
+  
+  // For now, disable virtualization to ensure everything renders
+  // Can be re-enabled later for large molecules
+  const visibleAtoms = molecule.atoms;
+  const visibleBonds = molecule.bonds;
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragStart, setDragStart] = useState<Point | null>(null);
   const [selectBox, setSelectBox] = useState<{ start: Point; end: Point } | null>(null);
@@ -186,6 +413,7 @@ export function ChemCanvas({
     console.log('=== END HYDROGEN AUTO-FILL ===');
   }, [molecule.atoms.length, molecule.bonds.length]); // Only trigger on structural changes, not molecule reference changes
 
+  // Memoized utility functions
   const getCanvasPoint = useCallback((clientX: number, clientY: number): Point => {
     if (!svgRef.current) return { x: 0, y: 0 };
     
@@ -200,7 +428,7 @@ export function ChemCanvas({
     };
   }, [canvasOffset, scale]);
 
-  const findAtomAtPoint = (point: Point): Atom | null => {
+  const findAtomAtPoint = useCallback((point: Point): Atom | null => {
     const foundAtom = molecule.atoms.find(atom => {
       const distance = Math.sqrt(
         Math.pow(atom.position.x - point.x, 2) + Math.pow(atom.position.y - point.y, 2)
@@ -209,12 +437,12 @@ export function ChemCanvas({
     }) || null;
     
     return foundAtom;
-  };
+  }, [molecule.atoms]);
 
-  const findBondAtPoint = (point: Point): Bond | null => {
+  const findBondAtPoint = useCallback((point: Point): Bond | null => {
     return molecule.bonds.find(bond => {
-      const atom1 = molecule.atoms.find(a => a.id === bond.sourceAtomId);
-      const atom2 = molecule.atoms.find(a => a.id === bond.targetAtomId);
+      const atom1 = atomMap.get(bond.sourceAtomId);
+      const atom2 = atomMap.get(bond.targetAtomId);
       
       if (!atom1 || !atom2) return false;
       
@@ -251,7 +479,7 @@ export function ChemCanvas({
       
       return distance <= 8; // Bond click tolerance
     }) || null;
-  };
+  }, [molecule.bonds, atomMap]);
 
   const handleCanvasClick = useCallback((event: React.MouseEvent) => {
     // Don't handle clicks immediately after a drag operation
@@ -515,7 +743,8 @@ export function ChemCanvas({
     if (selectedTool === 'select' && draggedAtom && isDragging && groupDragStart && selectedAtoms.length > 0) {
       const deltaX = rawPoint.x - groupDragStart.mouse.x;
       const deltaY = rawPoint.y - groupDragStart.mouse.y;
-      // Only move selected atoms (do not move hydrogens directly)
+      
+      // Move all selected atoms to their new positions
       const updatedAtoms = molecule.atoms.map(atom =>
         selectedAtoms.includes(atom.id)
           ? { ...atom, position: {
@@ -524,15 +753,30 @@ export function ChemCanvas({
             } }
           : atom
       );
-      // After moving, recalculate hydrogens for all moved heavy atoms
-      const movedHeavyAtomIds = selectedAtoms.filter(atomId => {
+      
+      // Check if any hydrogen atoms are manually selected
+      const selectedHydrogenIds = selectedAtoms.filter(atomId => {
         const atom = molecule.atoms.find(a => a.id === atomId);
-        return atom && atom.element !== 'H';
+        return atom && atom.element === 'H';
       });
+      
       let updatedMolecule = { ...molecule, atoms: updatedAtoms };
-      if (movedHeavyAtomIds.length > 0) {
-        updatedMolecule = HydrogenManager.updateHydrogensForAtoms(movedHeavyAtomIds, updatedMolecule);
+      
+      // Only recalculate hydrogens for heavy atoms that don't have manually selected hydrogens
+      if (selectedHydrogenIds.length === 0) {
+        // No hydrogen atoms are manually selected, safe to recalculate all heavy atoms
+        const movedHeavyAtomIds = selectedAtoms.filter(atomId => {
+          const atom = molecule.atoms.find(a => a.id === atomId);
+          return atom && atom.element !== 'H';
+        });
+        if (movedHeavyAtomIds.length > 0) {
+          updatedMolecule = HydrogenManager.updateHydrogensForAtoms(movedHeavyAtomIds, updatedMolecule);
+        }
+      } else {
+        // Hydrogen atoms are manually selected - don't recalculate any hydrogens
+        // This preserves the manual selection of hydrogen atoms during group moves
       }
+      
       onMoleculeChange(updatedMolecule);
       setPreviewBond(null); // No bond preview in move mode
     } else if (selectedTool === 'select' && dragStart) {
@@ -763,197 +1007,46 @@ export function ChemCanvas({
     onCanvasTransformChange(newOffset, newScale);
   }, [scale, canvasOffset, onCanvasTransformChange]);
 
-  const renderBond = (bond: Bond) => {
-    const atom1 = molecule.atoms.find(a => a.id === bond.sourceAtomId);
-    const atom2 = molecule.atoms.find(a => a.id === bond.targetAtomId);
+    const renderBond = useCallback((bond: Bond) => {
+    const atom1 = atomMap.get(bond.sourceAtomId);
+    const atom2 = atomMap.get(bond.targetAtomId);
     
     if (!atom1 || !atom2) return null;
-
-    const bondOffset = bond.type === 'double' ? 3 : bond.type === 'triple' ? 6 : 0;
+    
     const isHoveredForErase = selectedTool === 'eraser' && hoveredBond === bond.id;
-    // Render highlight for eraser hover (red overlay)
-    let highlight = null;
-    if (isHoveredForErase) {
-      highlight = (
-        <line
-          x1={atom1.position.x}
-          y1={atom1.position.y}
-          x2={atom2.position.x}
-          y2={atom2.position.y}
-          stroke="#ef4444"
-          strokeWidth="8"
-          opacity="0.4"
-          pointerEvents="none"
-        />
-      );
-    }
+    
+    return (
+      <MemoizedBond
+        key={bond.id}
+        bond={bond}
+        atom1={atom1}
+        atom2={atom2}
+        isHoveredForErase={isHoveredForErase}
+      />
+    );
+  }, [atomMap, selectedTool, hoveredBond]);
 
-    if (bond.type === 'single') {
-      return (
-        <g key={bond.id}>
-          {highlight}
-          <line
-            x1={atom1.position.x}
-            y1={atom1.position.y}
-            x2={atom2.position.x}
-            y2={atom2.position.y}
-            stroke="#374151"
-            strokeWidth="2"
-          />
-        </g>
-      );
-    } else if (bond.type === 'double') {
-      const dx = atom2.position.x - atom1.position.x;
-      const dy = atom2.position.y - atom1.position.y;
-      const length = Math.sqrt(dx * dx + dy * dy);
-      const offsetX = (-dy / length) * bondOffset;
-      const offsetY = (dx / length) * bondOffset;
-
-      return (
-        <g key={bond.id}>
-          {highlight}
-          <line
-            x1={atom1.position.x + offsetX}
-            y1={atom1.position.y + offsetY}
-            x2={atom2.position.x + offsetX}
-            y2={atom2.position.y + offsetY}
-            stroke="#374151"
-            strokeWidth="2"
-          />
-          <line
-            x1={atom1.position.x - offsetX}
-            y1={atom1.position.y - offsetY}
-            x2={atom2.position.x - offsetX}
-            y2={atom2.position.y - offsetY}
-            stroke="#374151"
-            strokeWidth="2"
-          />
-        </g>
-      );
-    } else if (bond.type === 'triple') {
-      const dx = atom2.position.x - atom1.position.x;
-      const dy = atom2.position.y - atom1.position.y;
-      const length = Math.sqrt(dx * dx + dy * dy);
-      const offsetX = (-dy / length) * bondOffset;
-      const offsetY = (dx / length) * bondOffset;
-
-      return (
-        <g key={bond.id}>
-          {highlight}
-          {/* Center line */}
-          <line
-            x1={atom1.position.x}
-            y1={atom1.position.y}
-            x2={atom2.position.x}
-            y2={atom2.position.y}
-            stroke="#374151"
-            strokeWidth="2"
-          />
-          {/* Top line */}
-          <line
-            x1={atom1.position.x + offsetX}
-            y1={atom1.position.y + offsetY}
-            x2={atom2.position.x + offsetX}
-            y2={atom2.position.y + offsetY}
-            stroke="#374151"
-            strokeWidth="2"
-          />
-          {/* Bottom line */}
-          <line
-            x1={atom1.position.x - offsetX}
-            y1={atom1.position.y - offsetY}
-            x2={atom2.position.x - offsetX}
-            y2={atom2.position.y - offsetY}
-            stroke="#374151"
-            strokeWidth="2"
-          />
-        </g>
-      );
-    } else if (bond.type === 'wedge') {
-      // Wedge bond rendering (3D representation)
-      const dx = atom2.position.x - atom1.position.x;
-      const dy = atom2.position.y - atom1.position.y;
-      const length = Math.sqrt(dx * dx + dy * dy);
-      const offsetX = (-dy / length) * 4;
-      const offsetY = (dx / length) * 4;
-
-      return (
-        <g key={bond.id}>
-          {highlight}
-          <polygon
-            points={`${atom1.position.x},${atom1.position.y} ${atom2.position.x + offsetX},${atom2.position.y + offsetY} ${atom2.position.x - offsetX},${atom2.position.y - offsetY}`}
-            fill="#374151"
-            stroke="#374151"
-            strokeWidth="1"
-          />
-        </g>
-      );
-    } else if (bond.type === 'dash') {
-      // Dashed bond rendering (3D representation - going into page)
-      return (
-        <g key={bond.id}>
-          {highlight}
-          <line
-            x1={atom1.position.x}
-            y1={atom1.position.y}
-            x2={atom2.position.x}
-            y2={atom2.position.y}
-            stroke="#374151"
-            strokeWidth="2"
-            strokeDasharray="5,3"
-          />
-        </g>
-      );
-    }
-
-    return null;
-  };
-
-  const renderAtom = (atom: Atom) => {
-    const color = elementColors[atom.element as ElementSymbol];
+  const renderAtom = useCallback((atom: Atom) => {
+    const color = elementColors[atom.element as ElementSymbol] || elementColors['C'];
     const isSelected = selectedAtoms.includes(atom.id);
     const isHovered = hoveredAtom === atom.id && selectedTool === 'select';
-    const isDraggedAtom = draggedAtom === atom.id;
+    const isDragged = draggedAtom === atom.id;
     const isHoveredForErase = selectedTool === 'eraser' && hoveredAtom === atom.id;
-    // Set text color: black for light backgrounds, white for dark backgrounds
     const textColor = isColorLight(color) ? '#18181b' : 'white';
+    
     return (
-      <g key={atom.id}>
-        {/* Selection/hover/eraser ring */}
-        {(isSelected || isHovered || isDraggedAtom || isHoveredForErase) && (
-          <circle
-            cx={atom.position.x}
-            cy={atom.position.y}
-            r={ATOM_RADIUS + 4}
-            fill="none"
-            stroke={isHoveredForErase ? "#ef4444" : (isSelected || isDraggedAtom ? "#3b82f6" : "#93c5fd")}
-            strokeWidth={isHoveredForErase ? 3 : 2}
-            strokeDasharray={isHovered && !isSelected ? "4,2" : undefined}
-            opacity="0.8"
-          />
-        )}
-        <circle
-          cx={atom.position.x}
-          cy={atom.position.y}
-          r={ATOM_RADIUS}
-          fill={color}
-          stroke="white"
-          strokeWidth="2"
-        />
-        <text
-          x={atom.position.x}
-          y={atom.position.y}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fontSize="12"
-          fontWeight="bold"
-          fill={textColor}
-        >
-          {atom.element}
-        </text>
-      </g>
+      <MemoizedAtom
+        key={atom.id}
+        atom={atom}
+        color={color}
+        isSelected={isSelected}
+        isHovered={isHovered}
+        isDragged={isDragged}
+        isHoveredForErase={isHoveredForErase}
+        textColor={textColor}
+      />
     );
-  };
+  }, [elementColors, selectedAtoms, hoveredAtom, selectedTool, draggedAtom]);
 
   return (
     <div className={darkMode ? "flex-1 bg-gradient-to-br from-zinc-900 to-zinc-800 relative overflow-hidden" : "flex-1 bg-gradient-to-br from-gray-50 to-white relative overflow-hidden"}>
@@ -984,42 +1077,113 @@ export function ChemCanvas({
       >
         {/* Main content group with transform */}
         <g transform={`translate(${canvasOffset.x}, ${canvasOffset.y}) scale(${scale})`}>
-          {/* Render bonds first */}
-          {molecule.bonds.map(renderBond)}
+          {/* Layer 1: Static bonds (back layer) */}
+          <g className="bonds-layer">
+            {visibleBonds.map(renderBond)}
+          </g>
 
-          {/* Preview bond */}
-          {previewBond && (
-            <line
-              x1={previewBond.start.x}
-              y1={previewBond.start.y}
-              x2={previewBond.end.x}
-              y2={previewBond.end.y}
-              stroke="#3b82f6"
-              strokeWidth="2"
-              strokeDasharray="5,5"
-              opacity="0.7"
-            />
-          )}
+          {/* Layer 2: Interactive elements (middle layer) */}
+          <g className="interactive-layer">
+            {/* Preview bond */}
+            {previewBond && (
+              <line
+                x1={previewBond.start.x}
+                y1={previewBond.start.y}
+                x2={previewBond.end.x}
+                y2={previewBond.end.y}
+                stroke="#3b82f6"
+                strokeWidth="2"
+                strokeDasharray="5,5"
+                opacity="0.7"
+              />
+            )}
 
-          {/* Select box preview */}
-          {selectBox && (
-            <rect
-              x={Math.min(selectBox.start.x, selectBox.end.x)}
-              y={Math.min(selectBox.start.y, selectBox.end.y)}
-              width={Math.abs(selectBox.end.x - selectBox.start.x)}
-              height={Math.abs(selectBox.end.y - selectBox.start.y)}
-              fill="#3b82f6"
-              fillOpacity={0.12}
-              stroke="#3b82f6"
-              strokeDasharray="6,3"
-              strokeWidth={2}
-            />
-          )}
+            {/* Select box preview */}
+            {selectBox && (
+              <rect
+                x={Math.min(selectBox.start.x, selectBox.end.x)}
+                y={Math.min(selectBox.start.y, selectBox.end.y)}
+                width={Math.abs(selectBox.end.x - selectBox.start.x)}
+                height={Math.abs(selectBox.end.y - selectBox.start.y)}
+                fill="#3b82f6"
+                fillOpacity={0.12}
+                stroke="#3b82f6"
+                strokeDasharray="6,3"
+                strokeWidth={2}
+              />
+            )}
+          </g>
 
-          {/* Render atoms on top */}
-          {molecule.atoms.map(renderAtom)}
+          {/* Layer 3: Atoms (top layer) */}
+          <g className="atoms-layer">
+            {visibleAtoms.map(renderAtom)}
+          </g>
         </g>
       </svg>
+
+      {/* Undo/Redo Controls */}
+      <div className="absolute bottom-4 left-4 flex gap-2">
+        <button
+          onClick={undo}
+          disabled={!canUndo}
+          className={`
+            w-10 h-10 rounded-lg shadow-lg flex items-center justify-center transition-all
+            ${darkMode
+              ? canUndo 
+                ? 'bg-zinc-800/80 hover:bg-zinc-700/90 text-zinc-300 hover:text-zinc-100 border border-zinc-600 cursor-pointer' 
+                : 'bg-zinc-900/60 text-zinc-600 border border-zinc-700 cursor-not-allowed'
+              : canUndo 
+                ? 'bg-white/80 hover:bg-white/90 text-gray-700 hover:text-gray-900 border border-gray-200 cursor-pointer' 
+                : 'bg-gray-100/60 text-gray-400 border border-gray-200 cursor-not-allowed'
+            }
+          `}
+          title="Undo (Ctrl+Z)"
+        >
+          <svg 
+            className="w-5 h-5" 
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              strokeWidth={2} 
+              d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" 
+            />
+          </svg>
+        </button>
+        <button
+          onClick={redo}
+          disabled={!canRedo}
+          className={`
+            w-10 h-10 rounded-lg shadow-lg flex items-center justify-center transition-all
+            ${darkMode
+              ? canRedo 
+                ? 'bg-zinc-800/80 hover:bg-zinc-700/90 text-zinc-300 hover:text-zinc-100 border border-zinc-600 cursor-pointer' 
+                : 'bg-zinc-900/60 text-zinc-600 border border-zinc-700 cursor-not-allowed'
+              : canRedo 
+                ? 'bg-white/80 hover:bg-white/90 text-gray-700 hover:text-gray-900 border border-gray-200 cursor-pointer' 
+                : 'bg-gray-100/60 text-gray-400 border border-gray-200 cursor-not-allowed'
+            }
+          `}
+          title="Redo (Ctrl+Y / Ctrl+Shift+Z)"
+        >
+          <svg 
+            className="w-5 h-5" 
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              strokeWidth={2} 
+              d="M21 10H11a8 8 0 00-8 8v2m18-10l-6 6m6-6l-6-6" 
+            />
+          </svg>
+        </button>
+      </div>
 
       {/* Zoom Controls */}
       <style>

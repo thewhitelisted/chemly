@@ -31,13 +31,11 @@ export function getAtomBondCount(atomId: string, bonds: Bond[]): number {
   const count = bonds.reduce((count, bond) => {
     if (bond.sourceAtomId === atomId || bond.targetAtomId === atomId) {
       const bondOrder = BOND_ORDER[bond.type];
-      console.log(`  Bond ${bond.type} (order ${bondOrder}) involving atom ${atomId}`);
       return count + bondOrder;
     }
     return count;
   }, 0);
   
-  console.log(`Total bond count for atom ${atomId}: ${count}`);
   return count;
 }
 
@@ -51,8 +49,6 @@ export function getRequiredHydrogens(atom: Atom, bonds: Bond[]): number {
   const currentBonds = getAtomBondCount(atom.id, bonds);
   const neededHydrogens = Math.max(0, valence - currentBonds);
   
-  console.log(`Atom ${atom.element}: valence=${valence}, currentBonds=${currentBonds}, neededHydrogens=${neededHydrogens}`);
-  
   return neededHydrogens;
 }
 
@@ -60,28 +56,18 @@ export function getRequiredHydrogens(atom: Atom, bonds: Bond[]): number {
  * Get all hydrogen atoms connected to a specific atom
  */
 export function getConnectedHydrogens(atomId: string, molecule: Molecule): Atom[] {
-  console.log(`=== getConnectedHydrogens for atom ${atomId.slice(0,8)} ===`);
-  console.log('Total atoms in molecule:', molecule.atoms.length);
-  console.log('Total bonds in molecule:', molecule.bonds.length);
-  console.log('Hydrogen atoms in molecule:', molecule.atoms.filter(a => a.element === 'H').length);
-  
   const hydrogenIds = molecule.bonds
     .filter(bond => {
       const isConnected = bond.sourceAtomId === atomId || bond.targetAtomId === atomId;
-      console.log(`Bond ${bond.id.slice(0,8)} (${bond.sourceAtomId.slice(0,8)}-${bond.targetAtomId.slice(0,8)}): connected=${isConnected}`);
       if (!isConnected) return false;
       
       const otherAtomId = bond.sourceAtomId === atomId ? bond.targetAtomId : bond.sourceAtomId;
       const otherAtom = molecule.atoms.find(atom => atom.id === otherAtomId);
-      console.log(`Other atom: ${otherAtom?.element} (${otherAtomId.slice(0,8)})`);
       return otherAtom?.element === 'H';
     })
     .map(bond => bond.sourceAtomId === atomId ? bond.targetAtomId : bond.sourceAtomId);
   
-  console.log('Found hydrogen IDs:', hydrogenIds.map(id => id.slice(0,8)));
   const result = molecule.atoms.filter(atom => hydrogenIds.includes(atom.id));
-  console.log(`Returning ${result.length} hydrogen atoms`);
-  console.log('=== End getConnectedHydrogens ===');
   
   return result;
 }
@@ -90,11 +76,8 @@ export function getConnectedHydrogens(atomId: string, molecule: Molecule): Atom[
  * Add a specific number of hydrogen atoms to an atom
  */
 export function addSpecificHydrogens(atom: Atom, molecule: Molecule, numberOfHydrogens: number): Molecule {
-  console.log(`=== addSpecificHydrogens called for ${atom.element} (${atom.id.slice(0,8)}) ===`);
-  console.log(`Adding exactly ${numberOfHydrogens} hydrogen atoms`);
   
   if (numberOfHydrogens <= 0) {
-    console.log('No hydrogens to add, returning original molecule');
     return molecule;
   }
   
@@ -105,7 +88,6 @@ export function addSpecificHydrogens(atom: Atom, molecule: Molecule, numberOfHyd
   const angleStep = (2 * Math.PI) / Math.max(numberOfHydrogens, 3); // Minimum 3 positions for better spacing
   const hydrogenDistance = 30; // Distance from main atom
   
-  console.log(`Creating ${numberOfHydrogens} hydrogen atoms`);
   for (let i = 0; i < numberOfHydrogens; i++) {
     const angle = i * angleStep;
     const hydrogenPosition = {
@@ -128,16 +110,12 @@ export function addSpecificHydrogens(atom: Atom, molecule: Molecule, numberOfHyd
     
     newAtoms.push(hydrogenAtom);
     newBonds.push(hydrogenBond);
-    console.log(`Created hydrogen ${i + 1}: atom ${hydrogenAtom.id.slice(0,8)} at (${hydrogenPosition.x.toFixed(1)}, ${hydrogenPosition.y.toFixed(1)})`);
   }
   
   const result = {
     atoms: [...molecule.atoms, ...newAtoms],
     bonds: [...molecule.bonds, ...newBonds],
   };
-  
-  console.log(`Returning molecule with ${result.atoms.length} atoms (${result.atoms.filter(a => a.element === 'H').length} hydrogens) and ${result.bonds.length} bonds`);
-  console.log('=== End addSpecificHydrogens ===');
   
   return result;
 }
@@ -247,12 +225,9 @@ export function updateHydrogensAfterBondRemoval(atomId: string, molecule: Molecu
   const neededHydrogens = getRequiredHydrogens(atom, molecule.bonds);
   const currentHydrogens = getConnectedHydrogens(atomId, molecule);
   
-  console.log(`Atom ${atom.element} (${atomId}): needs ${neededHydrogens}, has ${currentHydrogens.length}`);
-  
   if (neededHydrogens > currentHydrogens.length) {
     // Add more hydrogens to complete valence
     const hydrogensToAdd = neededHydrogens - currentHydrogens.length;
-    console.log(`Adding ${hydrogensToAdd} hydrogens to atom ${atom.element}`);
     
     // Find positions for new hydrogens, avoiding existing ones
     const existingPositions = currentHydrogens.map(h => ({
@@ -349,7 +324,6 @@ export function updateHydrogensAfterBondRemoval(atomId: string, molecule: Molecu
  * Update hydrogens for both atoms when a bond type changes
  */
 export function updateHydrogensAfterBondTypeChange(sourceAtomId: string, targetAtomId: string, molecule: Molecule): Molecule {
-  console.log('=== Bond type change - updating hydrogens ===');
   let updatedMolecule = molecule;
   
   // For each atom, recalculate and update hydrogens completely
@@ -357,11 +331,8 @@ export function updateHydrogensAfterBondTypeChange(sourceAtomId: string, targetA
     const atom = updatedMolecule.atoms.find(a => a.id === atomId);
     if (!atom || atom.element === 'H') continue;
     
-    console.log(`Processing atom ${atom.element} (${atomId})`);
-    
     // First, remove ALL existing hydrogen atoms connected to this atom
     const existingHydrogens = getConnectedHydrogens(atomId, updatedMolecule);
-    console.log(`Found ${existingHydrogens.length} existing hydrogens to remove`);
     
     const hydrogenIds = existingHydrogens.map(h => h.id);
     
@@ -375,7 +346,6 @@ export function updateHydrogensAfterBondTypeChange(sourceAtomId: string, targetA
     
     // Now add the correct number of hydrogens based on current bonds
     const neededHydrogens = getRequiredHydrogens(atom, updatedMolecule.bonds);
-    console.log(`Atom ${atom.element} needs ${neededHydrogens} hydrogens`);
     
     if (neededHydrogens > 0) {
       // Add hydrogens using the existing function
@@ -383,6 +353,5 @@ export function updateHydrogensAfterBondTypeChange(sourceAtomId: string, targetA
     }
   }
   
-  console.log('=== Finished bond type change update ===');
   return updatedMolecule;
 }

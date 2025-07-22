@@ -122,16 +122,13 @@ export function oclMoleculeToGraph(mol: OCL.Molecule): MoleculeGraph {
 export function graphToOclMolecule(graph: MoleculeGraph): OCL.Molecule {
   const mol = new OCL.Molecule(0, 0);
   const atomIdMap: Record<string, number> = {};
-  console.log('graphToOclMolecule: Atoms:', graph.atoms);
   for (const atom of graph.atoms) {
     const atomicNo = OCL.Molecule.getAtomicNoFromLabel(atom.element);
     const idx = mol.addAtom(atomicNo);
     atomIdMap[atom.id] = idx;
     if (atom.charge) mol.setAtomCharge(idx, atom.charge);
     // Hydrogens: OCL will handle implicit Hs automatically
-    console.log(`Added atom: ${atom.element} (id: ${atom.id}) -> OCL idx: ${idx}`);
   }
-  console.log('graphToOclMolecule: Bonds:', graph.bonds);
   for (const bond of graph.bonds) {
     const a1 = atomIdMap[bond.sourceAtomId];
     const a2 = atomIdMap[bond.targetAtomId];
@@ -152,19 +149,16 @@ export function graphToOclMolecule(graph: MoleculeGraph): OCL.Molecule {
     else if (bond.type === 'wedge' || bond.type === 'dash') {
       // Stereochemistry not handled yet; treat as single bond
       // TODO: Add stereochemistry support
-      console.warn(`Bond type '${bond.type}' is not supported for stereochemistry and will be treated as single.`);
       order = 1;
     }
     const bondIdx = mol.addBond(a1, a2);
     mol.setBondOrder(bondIdx, order);
-    console.log(`Added bond: ${bond.type} (${order}) between OCL idx ${a1} and ${a2}, bondIdx: ${bondIdx}`);
   }
   // After all bonds, log OCL molecule's bonds
   for (let i = 0; i < mol.getAllBonds(); i++) {
     const s = mol.getBondAtom(0, i);
     const t = mol.getBondAtom(1, i);
     const o = mol.getBondOrder(i);
-    console.log(`OCL bond ${i}: ${s} - ${t}, order: ${o}`);
   }
   // TODO: If you want to support 2D coordinates, use OCL coordinate generation here
   return mol;

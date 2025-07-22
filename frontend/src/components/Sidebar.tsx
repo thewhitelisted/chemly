@@ -38,7 +38,6 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
           setCurrentSmiles('');
         }
       } catch (error) {
-        console.error('Failed to generate SMILES:', error);
         setCurrentSmiles('');
       } finally {
         setIsExporting(false);
@@ -128,7 +127,6 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
     if (!promptInput.trim()) return;
     
     // Placeholder for AI prompt handling
-    console.log('AI Prompt:', promptInput);
     setNotification({ type: 'success', message: `AI prompt received: "${promptInput}" (feature coming soon)` });
     setPromptInput('');
   };

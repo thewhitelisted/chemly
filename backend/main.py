@@ -56,4 +56,4 @@ def get_molecule_name(req: NameRequest):
     # Use ThreadPoolExecutor to parallelize up to 2 tasks (matching CPU count)
     with ThreadPoolExecutor(max_workers=2) as executor:
         names = list(executor.map(cached_translate_forward, smiles_list))
-    return {"names": names} 
+    return {"names": names}
