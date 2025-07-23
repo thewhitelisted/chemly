@@ -24,11 +24,9 @@ export interface HealthResponse {
 
 // Generic API client
 class ApiClient {
-  private baseUrl: string;
   private timeout: number;
 
   constructor() {
-    this.baseUrl = apiConfig.baseUrl;
     this.timeout = apiConfig.timeout;
   }
 
