@@ -1,7 +1,7 @@
 import type { MoleculeGraph, Atom, ValidationWarning, MoleculeValidation } from '../models/MoleculeGraph';
 import type { ElementSymbol } from '../types/chemistry';
 import { MoleculeGraphUtils } from '../models/MoleculeGraph';
-import { ELEMENT_VALENCES, BOND_ORDER, getPossibleValences, isValidValence } from './valenceDefinitions';
+import { BOND_ORDER, isValidValence, getPossibleValences } from './valenceDefinitions';
 
 function getBondOrder(bondType: string): number {
   return BOND_ORDER[bondType] || 1;

@@ -1,10 +1,5 @@
 import { motion } from 'framer-motion';
 import { 
-  MessageCircle, 
-  Mail, 
-  Monitor, 
-  Handshake, 
-  Lightbulb, 
   ArrowDown 
 } from 'lucide-react';
 

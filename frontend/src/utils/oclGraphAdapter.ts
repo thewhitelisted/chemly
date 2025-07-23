@@ -154,12 +154,7 @@ export function graphToOclMolecule(graph: MoleculeGraph): OCL.Molecule {
     const bondIdx = mol.addBond(a1, a2);
     mol.setBondOrder(bondIdx, order);
   }
-  // After all bonds, log OCL molecule's bonds
-  for (let i = 0; i < mol.getAllBonds(); i++) {
-    const s = mol.getBondAtom(0, i);
-    const t = mol.getBondAtom(1, i);
-    const o = mol.getBondOrder(i);
-  }
+
   // TODO: If you want to support 2D coordinates, use OCL coordinate generation here
   return mol;
 }

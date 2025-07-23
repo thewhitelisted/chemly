@@ -4,12 +4,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { 
   BOND_ORDER, 
   getBestValenceForBondCount, 
-  getPreferredValence, 
-  canAcceptMoreBonds 
+  getPreferredValence
 } from './valenceDefinitions';
-
-// Ensure all elements in the toolbar are supported in valence logic
-const TOOLBAR_ELEMENTS: ElementSymbol[] = ['C','O','N','P','S','F','Cl','Br','I','H'];
 
 export class HydrogenManager {
   /**

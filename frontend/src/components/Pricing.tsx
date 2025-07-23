@@ -3,13 +3,10 @@ import {
   Check, 
   Star, 
   Zap, 
-  Users, 
   ArrowDown,
   Crown,
   Sparkles,
   Shield,
-  Globe,
-  Clock,
   MessageCircle
 } from 'lucide-react';
 
@@ -225,7 +222,6 @@ export default function Pricing() {
         <div className="max-w-7xl mx-auto">
           {/* Product Pricing Cards */}
           {Object.entries(PRODUCTS).map(([productKey, product]) => {
-            const ProductIcon = product.icon;
             return (
               <motion.div
                 key={productKey}

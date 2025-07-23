@@ -1,17 +1,6 @@
-import { Link, useLocation } from 'react-router-dom';
-import { useState } from 'react';
-// import logo from '../assets/OrgoLab.png';
-
-const navLinks = [
-  { to: '/', label: 'Home' },
-  { to: '/app', label: 'Product' },
-  { to: '/about', label: 'About' },
-  { to: '/contact', label: 'Contact' },
-];
+import { Link } from 'react-router-dom';
 
 export default function LandingPage() {
-  const location = useLocation();
-  const [menuOpen, setMenuOpen] = useState(false);
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#fffae2] via-[#e0f7f4] to-[#f8fafc] flex flex-col font-sans pt-24">
       {/* Modern Glassy Navbar */}

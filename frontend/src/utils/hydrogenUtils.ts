@@ -2,10 +2,8 @@ import { v4 as uuidv4 } from 'uuid';
 import type { Molecule, Atom, Bond, ElementSymbol } from '../types/chemistry';
 import { 
   BOND_ORDER, 
-  getBestValenceForBondCount, 
-  getPreferredValence, 
-  canAcceptMoreBonds,
-  getPossibleValences 
+  getBestValenceForBondCount,
+  canAcceptMoreBonds
 } from './valenceDefinitions';
 
 /**

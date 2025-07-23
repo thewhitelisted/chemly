@@ -1,4 +1,4 @@
-import * as OCL from 'openchemlib';
+
 import type { MoleculeGraph } from '../models/MoleculeGraph';
 import { graphToOclMolecule } from './oclGraphAdapter';
 

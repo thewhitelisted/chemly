@@ -6,7 +6,7 @@ import { validateStructure } from '../utils/validateStructure';
 import { namingCache } from '../utils/namingCache';
 import { createNamingDebouncer } from '../utils/smartDebouncer';
 import { useSmilesOptimization } from '../utils/useSmilesOptimization';
-import * as OCL from 'openchemlib';
+
 
 interface SidebarProps {
   molecule: Molecule;
@@ -24,30 +24,22 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
   });
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [moleculeName, setMoleculeName] = useState<string | string[]>('');
-  const [isNaming, setIsNaming] = useState(false);
-  const [namingProgress, setNamingProgress] = useState<'idle' | 'requesting' | 'cached'>('idle');
 
   // Use optimized SMILES generation
-  const { smiles: currentSmiles, isLoading: isExporting, error: smilesError } = useSmilesOptimization(molecule);
+  const { smiles: currentSmiles, isLoading: isExporting } = useSmilesOptimization(molecule);
 
   // Create debouncer for naming requests (simplified for pre-cached models)
   const debouncerRef = useRef(createNamingDebouncer(
     async (smiles: string) => {
       if (!smiles) {
         setMoleculeName('');
-        setIsNaming(false);
-        setNamingProgress('idle');
         return;
       }
 
       try {
-        setIsNaming(true);
-        setNamingProgress('requesting');
-        
         // Use the caching system
         const result = await namingCache.requestName(smiles);
         setMoleculeName(result);
-        setNamingProgress('cached');
       } catch (error) {
         if (error instanceof Error && error.message === 'Request cancelled') {
           // Request was cancelled, don't update state
@@ -55,9 +47,6 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
         }
         console.error('Naming request failed:', error);
         setMoleculeName('No name found');
-        setNamingProgress('idle');
-      } finally {
-        setIsNaming(false);
       }
     }
   ));
@@ -74,8 +63,6 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
     
     if (!currentSmiles) {
       setMoleculeName('');
-      setIsNaming(false);
-      setNamingProgress('idle');
       debouncer.cancel(); // Cancel any pending requests
       return;
     }
@@ -84,14 +71,11 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
     const cached = namingCache.getCached(currentSmiles);
     if (cached !== null) {
       setMoleculeName(cached);
-      setIsNaming(false);
-      setNamingProgress('cached');
       debouncer.cancel(); // No need to make a request
       return;
     }
 
     // Start the smart debounced request
-    setNamingProgress('requesting');
     debouncer.execute(currentSmiles);
 
     // Cleanup function
@@ -164,18 +148,7 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
     }
   };
 
-  // Get loading indicator based on progress
-  const getNameLoadingText = () => {
-    if (namingProgress === 'cached') return moleculeName;
-    if (isNaming && namingProgress === 'requesting') return 'Generating name...';
-    return moleculeName || 'No name found';
-  };
 
-  const getNameStatusIndicator = () => {
-    if (namingProgress === 'cached') return '⚡'; // Fast cache hit
-    if (isNaming) return '🔄'; // Loading
-    return '';
-  };
 
   useEffect(() => {
     if (notification) {
