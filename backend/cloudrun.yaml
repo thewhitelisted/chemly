@@ -1,0 +1,66 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: chemly-backend
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/execution-environment: gen2
+spec:
+  template:
+    metadata:
+      annotations:
+        # Resource allocation
+        run.googleapis.com/cpu: "2"
+        run.googleapis.com/memory: "4Gi"
+        
+        # Scaling configuration
+        run.googleapis.com/min-instances: "1"      # Keep warm to avoid cold starts
+        run.googleapis.com/max-instances: "10"     # Scale up for traffic
+        
+        # Timeout and concurrency
+        run.googleapis.com/timeout: "300"          # 5 minutes for ML processing
+        run.googleapis.com/cpu-throttling: "false" # Always allocate full CPU
+        
+        # Startup probe configuration
+        run.googleapis.com/startup-cpu-boost: "true"
+    spec:
+      containerConcurrency: 20  # Handle multiple requests per instance
+      timeoutSeconds: 300       # 5 minute timeout
+      containers:
+      - image: gcr.io/PROJECT_ID/chemly-backend:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: PORT
+          value: "8000"
+        - name: ENVIRONMENT
+          value: "production"
+        resources:
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+          requests:
+            cpu: "1"      # Minimum guaranteed
+            memory: "2Gi" # Minimum guaranteed
+        
+        # Optimized health checks - minimize requests for cost efficiency
+        startupProbe:
+          httpGet:
+            path: /ping           # Ultra-minimal endpoint
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 30        # Reduced frequency: every 30s during startup
+          timeoutSeconds: 10
+          failureThreshold: 2      # Reduced from 3 to 2
+          
+        # Liveness probe only - readiness probe removed for cost savings
+        livenessProbe:
+          httpGet:
+            path: /ping           # Ultra-minimal endpoint
+            port: 8000
+          periodSeconds: 300       # Much less frequent: every 5 minutes
+          timeoutSeconds: 10
+          failureThreshold: 2
+          
+        # REMOVED readinessProbe to save costs - using only liveness
+        # Once startup completes, we only check every 5 minutes 

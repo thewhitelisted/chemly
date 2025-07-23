@@ -31,7 +31,7 @@ const PRODUCTS = {
         features: [
           "Basic molecular drawing tools",
           "Community support",
-          "5 named structures per week"
+          "2 name credits per day"
         ],
         limitations: [
           "Basic features only"
@@ -49,7 +49,7 @@ const PRODUCTS = {
           "Advanced AI features",
           "Export to multiple formats",
           "Priority support",
-          "1000 named structures per week"
+          "70 name credits per day"
         ],
         limitations: [],
         cta: "Start Monthly",
@@ -65,7 +65,7 @@ const PRODUCTS = {
           "Advanced AI features",
           "Export to multiple formats",
           "Priority support",
-          "1000 named structures per week"
+          "70 name credits per day"
         ],
         limitations: [],
         cta: "Start 4-Month Plan",
@@ -81,7 +81,7 @@ const PRODUCTS = {
           "Advanced AI features",
           "Export to multiple formats",
           "Priority support",
-          "1000 named structures per week"
+          "70 name credits per day"
         ],
         limitations: [],
         cta: "Start Annual Plan",

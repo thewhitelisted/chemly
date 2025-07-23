@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Copy, Download, FileText, AlertTriangle, Lightbulb, Upload } from 'lucide-react';
 import type { Molecule, ValidationWarning } from '../types/chemistry';
-import { exportToSmiles } from '../utils/graphToSmiles';
 import { importFromSmiles } from '../utils/smilesToGraph';
 import { validateStructure } from '../utils/validateStructure';
+import { namingCache } from '../utils/namingCache';
+import { createNamingDebouncer } from '../utils/smartDebouncer';
+import { useSmilesOptimization } from '../utils/useSmilesOptimization';
 import * as OCL from 'openchemlib';
 
 interface SidebarProps {
@@ -13,10 +15,8 @@ interface SidebarProps {
 
 export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
   const [smilesInput, setSmilesInput] = useState('');
-  const [currentSmiles, setCurrentSmiles] = useState('');
   const [promptInput, setPromptInput] = useState('');
   const [copied, setCopied] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [validation, setValidation] = useState<{ isValid: boolean; warnings: ValidationWarning[] }>({ 
     isValid: true, 
@@ -25,27 +25,42 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [moleculeName, setMoleculeName] = useState<string | string[]>('');
   const [isNaming, setIsNaming] = useState(false);
+  const [namingProgress, setNamingProgress] = useState<'idle' | 'requesting' | 'cached'>('idle');
 
-  // Update SMILES when molecule changes
-  useEffect(() => {
-    const updateSmiles = async () => {
-      setIsExporting(true);
-      try {
-        const result = await exportToSmiles(molecule);
-        if (result.success && result.smiles) {
-          setCurrentSmiles(result.smiles);
-        } else {
-          setCurrentSmiles('');
-        }
-      } catch (error) {
-        setCurrentSmiles('');
-      } finally {
-        setIsExporting(false);
+  // Use optimized SMILES generation
+  const { smiles: currentSmiles, isLoading: isExporting, error: smilesError } = useSmilesOptimization(molecule);
+
+  // Create debouncer for naming requests (simplified for pre-cached models)
+  const debouncerRef = useRef(createNamingDebouncer(
+    async (smiles: string) => {
+      if (!smiles) {
+        setMoleculeName('');
+        setIsNaming(false);
+        setNamingProgress('idle');
+        return;
       }
-    };
 
-    updateSmiles();
-  }, [molecule]);
+      try {
+        setIsNaming(true);
+        setNamingProgress('requesting');
+        
+        // Use the caching system
+        const result = await namingCache.requestName(smiles);
+        setMoleculeName(result);
+        setNamingProgress('cached');
+      } catch (error) {
+        if (error instanceof Error && error.message === 'Request cancelled') {
+          // Request was cancelled, don't update state
+          return;
+        }
+        console.error('Naming request failed:', error);
+        setMoleculeName('No name found');
+        setNamingProgress('idle');
+      } finally {
+        setIsNaming(false);
+      }
+    }
+  ));
 
   // Update validation when molecule changes
   useEffect(() => {
@@ -53,45 +68,45 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
     setValidation(newValidation);
   }, [molecule]);
 
-  // Debounced update of molecule name(s) when currentSmiles changes
+  // Smart debounced naming when SMILES changes
   useEffect(() => {
+    const debouncer = debouncerRef.current;
+    
     if (!currentSmiles) {
       setMoleculeName('');
+      setIsNaming(false);
+      setNamingProgress('idle');
+      debouncer.cancel(); // Cancel any pending requests
       return;
     }
 
-    setIsNaming(true);
-    const handler = setTimeout(() => {
-      const fetchNames = async () => {
-        try {
-          const fragments = currentSmiles.split('.').map(f => f.trim()).filter(Boolean);
-          const body = { smiles: fragments.length === 1 ? fragments[0] : fragments };
-          const response = await fetch('/api/name', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-          });
-          if (!response.ok) throw new Error('Naming API request failed');
-          const data = await response.json();
-          if (Array.isArray(data.names)) {
-            setMoleculeName(fragments.length === 1 ? data.names[0] : data.names);
-          } else {
-            setMoleculeName('No name found');
-          }
-        } catch (e) {
-          setMoleculeName('No name found');
-        } finally {
-          setIsNaming(false);
-        }
-      };
-      fetchNames();
-    }, 5000); // 5 seconds
-
-    return () => {
-      clearTimeout(handler);
+    // Check cache first for immediate feedback
+    const cached = namingCache.getCached(currentSmiles);
+    if (cached !== null) {
+      setMoleculeName(cached);
       setIsNaming(false);
+      setNamingProgress('cached');
+      debouncer.cancel(); // No need to make a request
+      return;
+    }
+
+    // Start the smart debounced request
+    setNamingProgress('requesting');
+    debouncer.execute(currentSmiles);
+
+    // Cleanup function
+    return () => {
+      debouncer.cancel();
     };
   }, [currentSmiles]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      debouncerRef.current.cancel();
+      namingCache.cancelAllRequests();
+    };
+  }, []);
 
   const handleCopySmiles = async () => {
     try {
@@ -147,6 +162,19 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
       case 'info': return <FileText className="w-4 h-4" />;
       default: return <FileText className="w-4 h-4" />;
     }
+  };
+
+  // Get loading indicator based on progress
+  const getNameLoadingText = () => {
+    if (namingProgress === 'cached') return moleculeName;
+    if (isNaming && namingProgress === 'requesting') return 'Generating name...';
+    return moleculeName || 'No name found';
+  };
+
+  const getNameStatusIndicator = () => {
+    if (namingProgress === 'cached') return '⚡'; // Fast cache hit
+    if (isNaming) return '🔄'; // Loading
+    return '';
   };
 
   useEffect(() => {
@@ -230,25 +258,33 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
         </div>
       </div>
 
-      {/* Molecule Name (CACTUS) */}
+      {/* Molecule Name (Optimized) */}
       <div className="space-y-2">
         <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
           <FileText className="w-4 h-4" />
           <span className="dark:text-gray-100">Molecule Name{Array.isArray(moleculeName) && moleculeName.length > 1 ? 's' : ''}</span>
+          <span className="text-xs">{getNameStatusIndicator()}</span>
         </h3>
-        <div className="p-3 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-md">
-          {isNaming ? (
-            <span className="text-sm text-gray-700 dark:text-gray-100 font-mono break-all bg-transparent">Generating...</span>
-          ) : Array.isArray(moleculeName) ? (
+        <div className={`p-3 border rounded-md transition-colors ${
+          namingProgress === 'cached' ? 'bg-green-50 dark:bg-green-900 border-green-200 dark:border-green-800' :
+          isNaming ? 'bg-blue-50 dark:bg-blue-900 border-blue-200 dark:border-blue-800' :
+          'bg-gray-50 dark:bg-zinc-800 border-gray-200 dark:border-zinc-700'
+        }`}>
+          {Array.isArray(moleculeName) ? (
             <ul className="list-disc pl-5">
               {moleculeName.map((name, idx) => (
                 <li key={idx} className="text-sm text-gray-700 dark:text-gray-100 font-mono break-all bg-transparent">{name}</li>
               ))}
             </ul>
           ) : (
-            <span className="text-sm text-gray-700 dark:text-gray-100 font-mono break-all bg-transparent">{moleculeName || 'No name found'}</span>
+            <span className="text-sm text-gray-700 dark:text-gray-100 font-mono break-all bg-transparent">
+              {getNameLoadingText()}
+            </span>
           )}
         </div>
+        {namingProgress === 'cached' && (
+          <p className="text-xs text-green-600 dark:text-green-400">⚡ Instant result from cache</p>
+        )}
       </div>
 
       {/* Structure Validation */}
@@ -296,30 +332,33 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
       <div className="space-y-2">
         <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
           <FileText className="w-4 h-4" />
-          <span className="dark:text-gray-100">Molecule Info</span>
+          <span className="dark:text-gray-100">Molecule Statistics</span>
         </h3>
-        <div className="p-3 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-md space-y-1 text-sm">
-          <div className="flex justify-between">
-            <span className="text-gray-600 dark:text-gray-300">Atoms:</span>
-            <span className="font-medium dark:text-gray-100">{molecule.atoms.length}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-600 dark:text-gray-300">Bonds:</span>
-            <span className="font-medium dark:text-gray-100">{molecule.bonds.length}</span>
-          </div>
-          {molecule.atoms.length > 0 && (
+        <div className="p-3 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-md">
+          <div className="space-y-1 text-sm text-gray-700 dark:text-gray-100">
             <div className="flex justify-between">
-              <span className="text-gray-600 dark:text-gray-300">Elements:</span>
-              <span className="font-medium">
-                {Array.from(new Set(molecule.atoms.map(a => a.element))).join(', ')}
-              </span>
+              <span>Atoms:</span>
+              <span className="font-mono">{molecule.atoms.length}</span>
             </div>
-          )}
+            <div className="flex justify-between">
+              <span>Bonds:</span>
+              <span className="font-mono">{molecule.bonds.length}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Non-H atoms:</span>
+              <span className="font-mono">{molecule.atoms.filter(a => a.element !== 'H').length}</span>
+            </div>
+          </div>
         </div>
       </div>
+
+      {/* Success/Error Notifications */}
       {notification && (
-        <div className={`fixed bottom-4 right-4 z-50 px-4 py-2 rounded shadow-lg text-white ${notification.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}
-          style={{ minWidth: 200, textAlign: 'center' }}>
+        <div className={`p-3 rounded-md border text-sm ${
+          notification.type === 'success' 
+            ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900 dark:border-green-800 dark:text-green-200' 
+            : 'bg-red-50 border-red-200 text-red-700 dark:bg-red-900 dark:border-red-800 dark:text-red-200'
+        }`}>
           {notification.message}
         </div>
       )}
