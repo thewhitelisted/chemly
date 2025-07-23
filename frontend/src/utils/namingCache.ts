@@ -111,14 +111,19 @@ class NamingCache {
     const fragments = smiles.split('.').map(f => f.trim()).filter(Boolean);
     const body = { smiles: fragments.length === 1 ? fragments[0] : fragments };
     
+    console.log('Sending request:', { smiles, fragments, body });
+    
     const response = await fetch(buildApiUrl('/api/name'), {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
       signal
     });
 
     if (!response.ok) {
-      throw new Error(`Naming API request failed: ${response.status}`);
+      const errorText = await response.text();
+      console.error('Request failed:', { status: response.status, error: errorText, body });
+      throw new Error(`Naming API request failed: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
