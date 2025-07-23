@@ -1,3 +1,5 @@
+import { buildApiUrl, apiConfig } from '../config/api';
+
 interface CacheEntry {
   name: string | string[];
   timestamp: number;
@@ -17,7 +19,7 @@ class NamingCache {
   private requestQueue = new Map<string, QueuedRequest>();
   private readonly CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
   private readonly MAX_CACHE_SIZE = 1000;
-  private readonly REQUEST_TIMEOUT = 45000; // 45s timeout to handle STOUT processing time
+  private readonly REQUEST_TIMEOUT = apiConfig.timeout; // Use configured timeout
 
   // Get cached name if available and not expired
   getCached(smiles: string): string | string[] | null {
@@ -111,8 +113,9 @@ class NamingCache {
     
     console.log('Making request for SMILES:', smiles);
     console.log('Request body:', body);
+    console.log('API URL:', buildApiUrl('/api/name'));
     
-    const response = await fetch('/api/name', {
+    const response = await fetch(buildApiUrl('/api/name'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
