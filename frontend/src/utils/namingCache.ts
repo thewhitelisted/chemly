@@ -111,34 +111,21 @@ class NamingCache {
     const fragments = smiles.split('.').map(f => f.trim()).filter(Boolean);
     const body = { smiles: fragments.length === 1 ? fragments[0] : fragments };
     
-    console.log('Making request for SMILES:', smiles);
-    console.log('Request body:', body);
-    console.log('API URL:', buildApiUrl('/api/name'));
-    
     const response = await fetch(buildApiUrl('/api/name'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
       signal
     });
 
-    console.log('Response status:', response.status);
-    
     if (!response.ok) {
       throw new Error(`Naming API request failed: ${response.status}`);
     }
 
     const data = await response.json();
-    console.log('Response data:', data);
-    console.log('data.names:', data.names);
-    console.log('Array.isArray(data.names):', Array.isArray(data.names));
     
     if (Array.isArray(data.names)) {
-      const result = fragments.length === 1 ? data.names[0] : data.names;
-      console.log('Returning result:', result);
-      return result;
+      return fragments.length === 1 ? data.names[0] : data.names;
     } else {
-      console.log('data.names is not an array, returning "No name found"');
       return 'No name found';
     }
   }
