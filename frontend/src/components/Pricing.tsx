@@ -29,63 +29,51 @@ const PRODUCTS = {
         period: "forever",
         description: "Try OrgoDraw for free",
         features: [
+          "35 premium naming credits/month",
+          "200 basic naming credits/month",
           "Basic molecular drawing tools",
-          "Community support",
-          "2 name credits per day"
         ],
         limitations: [
-          "Basic features only"
+          "No AI Assistant",
+          "No advanced features"
         ],
         cta: "Get Started Free",
-        popular: false
+        popular: false,
+        visual: "muted"
       },
       {
-        name: "Monthly",
-        price: "$5.99",
+        name: "Pro",
+        price: "$5.50",
         period: "per month",
-        description: "Flexible monthly billing",
+        description: "$18 for 4mo or $45/year",
         features: [
-          "Everything in Free",
-          "Advanced AI features",
+          "750 premium naming credits/month",
+          "1000 basic naming credits/month",
+          "125 AI Assistant messages/month",
+          "All Free features",
           "Export to multiple formats",
-          "Priority support",
-          "70 name credits per day"
+          "Priority support"
         ],
         limitations: [],
-        cta: "Start Monthly",
-        popular: false
+        cta: "Start Pro (Most Popular)",
+        popular: true,
+        visual: "highlighted"
       },
       {
-        name: "4 Months",
-        price: "$4.99",
+        name: "Premium",
+        price: "$8.50",
         period: "per month",
-        description: "Most popular for students",
+        description: "$30 for 4mo or $60/year",
         features: [
-          "Everything in Free",
-          "Advanced AI features",
-          "Export to multiple formats",
-          "Priority support",
-          "70 name credits per day"
+          "1500 premium naming credits/month",
+          "2000 basic naming credits/month",
+          "200 AI Assistant messages/month",
+          "All Pro features",
         ],
         limitations: [],
-        cta: "Start 4-Month Plan",
-        popular: true
-      },
-      {
-        name: "Annual",
-        price: "$4.50",
-        period: "per month",
-        description: "Best value with yearly billing",
-        features: [
-          "Everything in Free",
-          "Advanced AI features",
-          "Export to multiple formats",
-          "Priority support",
-          "70 name credits per day"
-        ],
-        limitations: [],
-        cta: "Start Annual Plan",
-        popular: false
+        cta: "Start Premium (Advanced)",
+        popular: false,
+        visual: "advanced"
       }
     ]
   }
@@ -102,34 +90,46 @@ const FEATURE_COMPARISON = {
   orgodraw: {
     features: [
       {
+        name: "Premium Naming Credits",
+        description: "Use STOUT V2 model for complex naming.",
+        free: "35/mo",
+        pro: "750/mo",
+        premium: "1500/mo"
+      },
+      {
+        name: "Basic Naming Credits",
+        description: "Use public data to generate simple names.",
+        free: "200/mo",
+        pro: "1000/mo",
+        premium: "2000/mo"
+      },
+      {
+        name: "AI Assistant Messages",
+        description: "Chemistry chat, structure help, and more.",
+        free: "-",
+        pro: "125/mo",
+        premium: "200/mo"
+      },
+      {
         name: "Molecular Drawing",
         description: "Advanced drawing tools with AI assistance",
         free: "Basic",
-        paid: "Advanced"
-      },
-      {
-        name: "AI Suggestions",
-        description: "Intelligent structure completion and validation",
-        free: "Not available",
-        paid: "Advanced"
+        pro: "Advanced",
+        premium: "Advanced"
       },
       {
         name: "Export Formats",
         description: "File formats you can export to",
-        free: "Not available",
-        paid: "PNG, SVG, PDF, SMILES, MOL"
+        free: "-",
+        pro: "PNG, SVG, PDF, SMILES, MOL",
+        premium: "PNG, SVG, PDF, SMILES, MOL"
       },
       {
         name: "Support",
         description: "Customer support level",
-        free: "Community",
-        paid: "Priority email"
-      },
-      {
-        name: "Naming",
-        description: "Molecular naming capabilities",
-        free: "5 per week",
-        paid: "1000 per week"
+        free: "-",
+        pro: "Priority email",
+        premium: "Priority email"
       }
     ]
   }
@@ -245,7 +245,7 @@ export default function Pricing() {
                 </div>
 
                 {/* Pricing Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 max-w-7xl mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-7xl mx-auto">
                   {product.plans.map((plan, index) => (
                     <motion.div
                       key={plan.name}
@@ -253,11 +253,11 @@ export default function Pricing() {
                       whileInView={{ opacity: 1, y: 0 }}
                       viewport={{ once: true, amount: 0.5 }}
                       transition={{ duration: 0.7, delay: 0.3 + index * 0.1 }}
-                      className={`relative bg-white/60 backdrop-blur-md rounded-2xl shadow-xl p-6 border-2 transition-all duration-300 hover:scale-105 hover:shadow-2xl ${
-                        plan.popular 
-                          ? 'border-[#0097b2] shadow-[#0097b2]/20' 
-                          : 'border-[#e0f7f4] hover:border-[#0097b2]'
-                      }`}
+                      className={`relative rounded-2xl p-6 border-2 transition-all duration-300 hover:scale-105 hover:shadow-2xl 
+                        ${plan.popular ? 'border-[#0097b2] shadow-[#0097b2]/20 bg-white/90 backdrop-blur-md' : ''}
+                        ${plan.visual === 'muted' ? 'bg-white/50 border-[#e0f7f4] shadow-none text-[#7a7a7a]' : ''}
+                        ${plan.visual === 'highlighted' ? 'bg-gradient-to-br from-[#e0f7f4] to-[#fff] border-[#0097b2] shadow-lg' : ''}
+                        ${plan.visual === 'advanced' ? 'bg-white/80 border-[#007d40] shadow-[#007d40]/10' : ''}`}
                     >
                       {/* Popular Badge */}
                       {plan.popular && (
@@ -268,7 +268,24 @@ export default function Pricing() {
                           </div>
                         </div>
                       )}
-
+                      {/* Advanced Tag */}
+                      {plan.visual === 'advanced' && (
+                        <div className="absolute -top-3 right-4">
+                          <div className="bg-[#007d40] text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
+                            <Crown className="w-3 h-3" />
+                            Best for Advanced Use
+                          </div>
+                        </div>
+                      )}
+                      {/* Value Unlocked Tag */}
+                      {plan.visual === 'advanced' && (
+                        <div className="absolute -bottom-3 left-1/2 -translate-x-1/2">
+                          <div className="bg-gradient-to-r from-[#007d40] to-[#0097b2] text-white px-4 py-1 rounded-full text-xs font-bold flex items-center gap-1 shadow-md">
+                            <Sparkles className="w-3 h-3" />
+                            Over $50 of AI & naming power/month
+                          </div>
+                        </div>
+                      )}
                       {/* Plan Header */}
                       <div className="text-center mb-6">
                         <h4 className="text-xl font-bold text-[#18181b] mb-2">{plan.name}</h4>
@@ -280,7 +297,6 @@ export default function Pricing() {
                         </div>
                         <p className="text-[#0097b2] font-medium text-sm">{plan.description}</p>
                       </div>
-
                       {/* Features */}
                       <div className="space-y-3 mb-6">
                         {plan.features.map((feature, featureIndex) => (
@@ -290,7 +306,6 @@ export default function Pricing() {
                           </div>
                         ))}
                       </div>
-
                       {/* Limitations */}
                       {plan.limitations.length > 0 && (
                         <div className="space-y-2 mb-6">
@@ -303,14 +318,13 @@ export default function Pricing() {
                           ))}
                         </div>
                       )}
-
                       {/* CTA Button */}
                       <button 
-                        className={`w-full py-2 px-4 rounded-lg font-bold text-sm transition-all duration-300 ${
-                          plan.popular
-                            ? 'bg-gradient-to-r from-[#007d40] to-[#0097b2] text-white hover:shadow-xl hover:scale-105'
-                            : 'bg-white/80 text-[#007d40] border-2 border-[#007d40] hover:bg-[#007d40] hover:text-white hover:scale-105'
-                        }`}
+                        className={`w-full py-2 px-4 rounded-lg font-bold text-sm transition-all duration-300 
+                          ${plan.popular ? 'bg-gradient-to-r from-[#007d40] to-[#0097b2] text-white hover:shadow-xl hover:scale-105' : ''}
+                          ${plan.visual === 'muted' ? 'bg-white/70 text-[#007d40] border-2 border-[#e0f7f4] hover:bg-[#e0f7f4] hover:text-[#007d40] hover:scale-105' : ''}
+                          ${plan.visual === 'highlighted' ? 'bg-[#0097b2] text-white border-2 border-[#0097b2] hover:bg-[#007d40] hover:text-white hover:scale-105' : ''}
+                          ${plan.visual === 'advanced' ? 'bg-white/90 text-[#007d40] border-2 border-[#007d40] hover:bg-[#007d40] hover:text-white hover:scale-105' : ''}`}
                       >
                         {plan.cta}
                       </button>
@@ -341,7 +355,7 @@ export default function Pricing() {
             </p>
           </motion.div>
 
-          {/* Feature Comparison Table */}
+          {/* Feature Comparison Table with Free, Pro, Premium columns */}
           {Object.entries(FEATURE_COMPARISON).map(([productKey, comparison]) => (
             <motion.div
               key={productKey}
@@ -355,25 +369,29 @@ export default function Pricing() {
                 <table className="w-full">
                   <thead>
                     <tr className="bg-gradient-to-r from-[#007d40] to-[#0097b2] text-white">
-                      <th className="px-6 py-4 text-left font-bold">Feature</th>
-                      <th className="px-6 py-4 text-center font-bold">Free</th>
-                      <th className="px-6 py-4 text-center font-bold">Paid</th>
+                      <th className="px-6 py-4 text-left font-bold w-1/4">Feature</th>
+                      <th className="px-6 py-4 text-center font-bold w-1/4">Free</th>
+                      <th className="px-6 py-4 text-center font-bold w-1/4">Pro</th>
+                      <th className="px-6 py-4 text-center font-bold w-1/4">Premium</th>
                     </tr>
                   </thead>
                   <tbody>
                     {comparison.features.map((feature, index) => (
                       <tr key={index} className={`border-b border-[#e0f7f4] ${index % 2 === 0 ? 'bg-white/40' : 'bg-white/20'}`}>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 w-1/4 text-left">
                           <div>
                             <div className="font-semibold text-[#18181b]">{feature.name}</div>
                             <div className="text-sm text-[#18181b] opacity-60">{feature.description}</div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-center">
+                        <td className="px-6 py-4 w-1/4 text-center">
                           <span className="text-sm font-medium text-[#18181b]">{feature.free}</span>
                         </td>
-                        <td className="px-6 py-4 text-center">
-                          <span className="text-sm font-medium text-[#18181b]">{feature.paid}</span>
+                        <td className="px-6 py-4 w-1/4 text-center">
+                          <span className="text-sm font-medium text-[#18181b]">{feature.pro}</span>
+                        </td>
+                        <td className="px-6 py-4 w-1/4 text-center">
+                          <span className="text-sm font-medium text-[#18181b]">{feature.premium}</span>
                         </td>
                       </tr>
                     ))}
@@ -382,6 +400,50 @@ export default function Pricing() {
               </div>
             </motion.div>
           ))}
+         {/* What are credits? Section (moved here) */}
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.5 }}
+            transition={{ duration: 0.8, delay: 0.2 }}
+            className="relative mt-20 max-w-5xl mx-auto"
+          >
+            <div className="text-center mb-10">
+              <div className="flex items-center justify-center gap-3 mb-3">
+                <h2 className="text-4xl md:text-5xl font-extrabold mb-6 text-[#007d40] tracking-tight">
+                  What are <span className="text-[#0097b2]">Credits?</span>
+                </h2>
+              </div>
+              <p className="text-lg md:text-xl text-[#18181b] font-medium mt-2 max-w-2xl mx-auto">Credits represent your monthly naming and AI power. Each type unlocks a different level of chemistry magic.</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {/* Basic Credits Card */}
+              <div className="bg-white/70 backdrop-blur-md rounded-2xl shadow-xl border border-[#e0f7f4] p-8 flex flex-col items-center transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:border-[#0097b2]">
+                <Shield className="w-10 h-10 text-[#007d40] mb-3" />
+                <div className="font-bold text-[#007d40] text-xl mb-1">Basic Credits</div>
+                <div className="text-[#18181b] text-base text-center">Use public data to generate simple names for molecules.</div>
+              </div>
+              {/* Premium Credits Card */}
+              <div className="bg-white/70 backdrop-blur-md rounded-2xl shadow-xl border border-[#e0f7f4] p-8 flex flex-col items-center transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:border-[#0097b2]">
+                <Crown className="w-10 h-10 text-[#0097b2] mb-3" />
+                <div className="font-bold text-[#0097b2] text-xl mb-1">Premium Credits</div>
+                <div className="text-[#18181b] text-base text-center">Utilizes STOUT V2 model for complex naming. Usage is based on computation time</div>
+              </div>
+              {/* AI Credits Card */}
+              <div className="bg-white/70 backdrop-blur-md rounded-2xl shadow-xl border border-[#e0f7f4] p-8 flex flex-col items-center transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:border-[#0097b2]">
+                <MessageCircle className="w-10 h-10 text-[#007d40] mb-3" />
+                <div className="font-bold text-[#007d40] text-xl mb-1">AI Credits</div>
+                <div className="text-[#18181b] text-base text-center">Power chemistry chat, structure help, and more with AI.</div>
+              </div>
+            </div>
+            <style>{`
+              @keyframes pulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.6; }
+              }
+              .animate-pulse { animation: pulse 2.2s infinite; }
+            `}</style>
+          </motion.div>
         </div>
       </section>
 

@@ -263,13 +263,8 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
         <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
           <FileText className="w-4 h-4" />
           <span className="dark:text-gray-100">Molecule Name{Array.isArray(moleculeName) && moleculeName.length > 1 ? 's' : ''}</span>
-          <span className="text-xs">{getNameStatusIndicator()}</span>
         </h3>
-        <div className={`p-3 border rounded-md transition-colors ${
-          namingProgress === 'cached' ? 'bg-green-50 dark:bg-green-900 border-green-200 dark:border-green-800' :
-          isNaming ? 'bg-blue-50 dark:bg-blue-900 border-blue-200 dark:border-blue-800' :
-          'bg-gray-50 dark:bg-zinc-800 border-gray-200 dark:border-zinc-700'
-        }`}>
+        <div className="p-3 border rounded-md transition-colors bg-gray-50 dark:bg-zinc-800 border-gray-200 dark:border-zinc-700">
           {Array.isArray(moleculeName) ? (
             <ul className="list-disc pl-5">
               {moleculeName.map((name, idx) => (
@@ -278,13 +273,10 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
             </ul>
           ) : (
             <span className="text-sm text-gray-700 dark:text-gray-100 font-mono break-all bg-transparent">
-              {getNameLoadingText()}
+              {moleculeName || 'No name found'}
             </span>
           )}
         </div>
-        {namingProgress === 'cached' && (
-          <p className="text-xs text-green-600 dark:text-green-400">⚡ Instant result from cache</p>
-        )}
       </div>
 
       {/* Structure Validation */}

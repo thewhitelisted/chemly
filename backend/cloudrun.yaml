@@ -9,20 +9,24 @@ spec:
   template:
     metadata:
       annotations:
-        # Resource allocation
+        # Resource allocation - optimized for ML workloads
         run.googleapis.com/cpu: "2"
         run.googleapis.com/memory: "4Gi"
         
-        # Scaling configuration
-        run.googleapis.com/min-instances: "1"      # Keep warm to avoid cold starts
+        # Scaling configuration - pay per request (cold starts on every traffic spike)
+        run.googleapis.com/min-instances: "0"      # Scale to zero when no traffic
         run.googleapis.com/max-instances: "10"     # Scale up for traffic
         
-        # Timeout and concurrency
+        # Timeout and concurrency - optimized for ML processing
         run.googleapis.com/timeout: "300"          # 5 minutes for ML processing
         run.googleapis.com/cpu-throttling: "false" # Always allocate full CPU
         
-        # Startup probe configuration
+        # Startup optimizations
         run.googleapis.com/startup-cpu-boost: "true"
+        run.googleapis.com/execution-environment: "gen2"  # Faster startup
+        
+        # Concurrency optimization
+        run.googleapis.com/concurrency: "20"       # Handle multiple requests per instance
     spec:
       containerConcurrency: 20  # Handle multiple requests per instance
       timeoutSeconds: 300       # 5 minute timeout

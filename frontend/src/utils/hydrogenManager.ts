@@ -217,10 +217,21 @@ export class HydrogenManager {
     const targetAtom = graph.atoms.find(a => a.id === targetAtomId);
     
     if (!sourceAtom || !targetAtom) return false;
-    
-    // Don't allow bonds to self
     if (sourceAtomId === targetAtomId) return false;
-    
+
+    // Helper to check if an atom can accept a bond, possibly by removing hydrogens
+    const canAcceptBondWithHydrogenSwap = (atom: Atom, atomId: string, bondOrder: number) => {
+      const currentBonds = this.getCurrentBondCount(atomId, graph);
+      const hydrogens = this.getConnectedHydrogens(atomId, graph).length;
+      const maxValence = getPreferredValence(atom.element as ElementSymbol);
+      // If already enough room, allow
+      if (currentBonds + bondOrder <= maxValence) return true;
+      // If not, can we remove hydrogens to make room?
+      // Remove as many hydrogens as needed (up to bondOrder)
+      const bondsAfterSwap = currentBonds - Math.min(hydrogens, bondOrder) + bondOrder;
+      return bondsAfterSwap <= maxValence && hydrogens >= bondOrder;
+    };
+
     // Check if bond already exists
     const existingBond = graph.bonds.find(bond =>
       (bond.sourceAtomId === sourceAtomId && bond.targetAtomId === targetAtomId) ||
@@ -231,23 +242,23 @@ export class HydrogenManager {
       // Bond exists, check if we can increase its order
       const currentOrder = BOND_ORDER[existingBond.type];
       const newOrder = currentOrder + bondOrder;
-      
       const sourceCurrentBonds = this.getCurrentBondCount(sourceAtomId, graph);
       const targetCurrentBonds = this.getCurrentBondCount(targetAtomId, graph);
-      
+      const sourceHydrogens = this.getConnectedHydrogens(sourceAtomId, graph).length;
+      const targetHydrogens = this.getConnectedHydrogens(targetAtomId, graph).length;
+      const sourceMaxValence = getPreferredValence(sourceAtom.element as ElementSymbol);
+      const targetMaxValence = getPreferredValence(targetAtom.element as ElementSymbol);
       // Calculate what the new bond counts would be
       const sourceNewBonds = sourceCurrentBonds - currentOrder + newOrder;
       const targetNewBonds = targetCurrentBonds - currentOrder + newOrder;
-      
-      return canAcceptMoreBonds(sourceAtom.element as ElementSymbol, sourceNewBonds - bondOrder, bondOrder) &&
-             canAcceptMoreBonds(targetAtom.element as ElementSymbol, targetNewBonds - bondOrder, bondOrder);
+      // Try to swap hydrogens if needed
+      const sourceCan = (sourceNewBonds <= sourceMaxValence) || (sourceNewBonds - sourceMaxValence <= sourceHydrogens && sourceHydrogens >= (sourceNewBonds - sourceMaxValence));
+      const targetCan = (targetNewBonds <= targetMaxValence) || (targetNewBonds - targetMaxValence <= targetHydrogens && targetHydrogens >= (targetNewBonds - targetMaxValence));
+      return sourceCan && targetCan;
     } else {
       // New bond
-      const sourceCurrentBonds = this.getCurrentBondCount(sourceAtomId, graph);
-      const targetCurrentBonds = this.getCurrentBondCount(targetAtomId, graph);
-      
-      return canAcceptMoreBonds(sourceAtom.element as ElementSymbol, sourceCurrentBonds, bondOrder) &&
-             canAcceptMoreBonds(targetAtom.element as ElementSymbol, targetCurrentBonds, bondOrder);
+      return canAcceptBondWithHydrogenSwap(sourceAtom, sourceAtomId, bondOrder) &&
+             canAcceptBondWithHydrogenSwap(targetAtom, targetAtomId, bondOrder);
     }
   }
 

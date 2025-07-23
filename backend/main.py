@@ -8,52 +8,100 @@ import asyncio
 import time
 import os
 
-# Import dependencies at startup since models are pre-cached
-from STOUT import translate_forward
-import pubchempy
-import torch
-
-# STOUT Performance Optimizations
-import os
+# Environment optimizations to reduce import warnings and improve performance
 os.environ['TOKENIZERS_PARALLELISM'] = 'false'  # Avoid tokenizer warnings
 os.environ['OMP_NUM_THREADS'] = '2'  # Optimize for better parallelism
 os.environ['TORCH_CUDNN_BENCHMARK'] = '1'  # Optimize CUDA performance
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Reduce TensorFlow logging
+os.environ['CUDA_VISIBLE_DEVICES'] = ''  # Disable CUDA if not needed
 
-# Global STOUT optimization setup
-_stout_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# Lazy loading setup - don't import heavy packages until needed
+_stout_imported = False
+_pubchempy_imported = False
+_torch_imported = False
+
+def lazy_import_pubchempy():
+    """Lazy import pubchempy (fast) to avoid startup delays"""
+    global _pubchempy_imported
+    if not _pubchempy_imported:
+        try:
+            import pubchempy
+            _pubchempy_imported = True
+            return pubchempy
+        except ImportError as e:
+            logging.error(f"Failed to import pubchempy: {e}")
+            raise
+    else:
+        import pubchempy
+        return pubchempy
+
+def lazy_import_torch():
+    """Lazy import torch (slow) to avoid startup delays"""
+    global _torch_imported
+    if not _torch_imported:
+        try:
+            import torch
+            _torch_imported = True
+            return torch
+        except ImportError as e:
+            logging.error(f"Failed to import torch: {e}")
+            raise
+    else:
+        import torch
+        return torch
+
+def lazy_import_stout():
+    """Lazy import STOUT (slowest) to avoid startup delays"""
+    global _stout_imported
+    if not _stout_imported:
+        try:
+            from STOUT import translate_forward
+            _stout_imported = True
+            return translate_forward
+        except ImportError as e:
+            logging.error(f"Failed to import STOUT: {e}")
+            raise
+    else:
+        from STOUT import translate_forward
+        return translate_forward
+
+# Global STOUT optimization setup - will be initialized when first needed
+_stout_device = None
 _stout_optimized = False
 _stout_model = None
 
 def optimize_stout_model():
-    """Apply advanced optimizations to STOUT model if possible"""
-    global _stout_optimized, _stout_model
+    """Apply CPU-optimized settings for STOUT model"""
+    global _stout_optimized, _stout_device
     
     if _stout_optimized:
         return
         
     try:
-        logger.info("Applying advanced STOUT optimizations...")
+        torch = lazy_import_torch()
+        logger.info("Applying CPU-optimized STOUT settings...")
         
-        # Set optimal torch settings
-        torch.backends.cudnn.benchmark = True if torch.cuda.is_available() else False
-        torch.set_float32_matmul_precision('medium')  # Faster matmul on modern GPUs
+        # CPU-only device
+        _stout_device = torch.device('cpu')
+        
+        # CPU-optimized torch settings
+        torch.set_num_threads(4)  # Optimal for Cloud Run vCPU
+        torch.set_float32_matmul_precision('medium')  # Faster CPU matmul
         
         # Try to enable torch.compile if available (PyTorch 2.0+)
         if hasattr(torch, 'compile'):
-            logger.info("Enabling torch.compile() optimization...")
+            logger.info("Enabling torch.compile() optimization for CPU...")
             # Note: STOUT's internal model compilation would need access to the actual model
             # This is a placeholder for when STOUT exposes model compilation
         
-        # Set optimal inference settings
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            logger.info(f"Using GPU optimization on device: {_stout_device}")
+        # CPU memory optimization
+        torch.backends.cudnn.enabled = False  # Disable CUDA optimizations
         
         _stout_optimized = True
-        logger.info("STOUT optimizations applied successfully")
+        logger.info("CPU-optimized STOUT settings applied successfully")
         
     except Exception as e:
-        logger.warning(f"Could not apply all STOUT optimizations: {e}")
+        logger.warning(f"Could not apply CPU optimizations: {e}")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -95,19 +143,19 @@ def cached_stout_translate(smiles: str) -> str:
     try:
         logger.info("Calling optimized STOUT translate_forward...")
         
-        # Advanced STOUT Performance Optimizations
+        # Lazy import STOUT
+        translate_forward = lazy_import_stout()
+        torch = lazy_import_torch()
+        
+        # CPU-optimized STOUT Performance Optimizations
         with torch.no_grad():
-            # Set optimal thread count for this inference
+            # Set optimal thread count for CPU inference
             original_threads = torch.get_num_threads()
-            torch.set_num_threads(2)  # Optimal for most STOUT workloads
+            torch.set_num_threads(2)  # Optimal for single molecule CPU processing
             
             try:
-                # Enable autocast for potential speed improvements on GPU
-                if torch.cuda.is_available():
-                    with torch.cuda.amp.autocast(enabled=True):
-                        iupac_name = translate_forward(smiles)
-                else:
-                    iupac_name = translate_forward(smiles)
+                # CPU-only inference (no GPU optimizations)
+                iupac_name = translate_forward(smiles)
             finally:
                 torch.set_num_threads(original_threads)
         
@@ -128,7 +176,7 @@ async def pubchem_name_from_smiles(smiles: str) -> Optional[str]:
         compounds = await asyncio.wait_for(
             loop.run_in_executor(
                 executor, 
-                lambda: pubchempy.get_compounds(smiles, 'smiles')
+                lambda: lazy_import_pubchempy().get_compounds(smiles, 'smiles')
             ),
             timeout=5.0  # 5 second timeout for PubChem
         )
@@ -148,16 +196,17 @@ async def pubchem_name_from_smiles(smiles: str) -> Optional[str]:
 
 def true_batch_stout_translate(smiles_list: List[str]) -> List[str]:
     """
-    True batch STOUT translation - attempts to use STOUT's internal batching
-    Falls back to optimized sequential processing if batching not available
+    CPU-optimized batch STOUT translation with caching
+    Uses cached results when available, processes new molecules sequentially
     """
     if not _stout_optimized:
         optimize_stout_model()
         
-    logger.info(f"Starting true batch STOUT translation for {len(smiles_list)} SMILES")
+    logger.info(f"Starting CPU-optimized batch STOUT translation for {len(smiles_list)} SMILES")
     start_time = time.time()
     
     try:
+        torch = lazy_import_torch()
         with torch.no_grad():
             # Set optimal threading for batch processing
             original_threads = torch.get_num_threads()
@@ -166,36 +215,15 @@ def true_batch_stout_translate(smiles_list: List[str]) -> List[str]:
             try:
                 results = []
                 
-                # Check if STOUT supports true batch processing
-                # Note: This would need to be tested with actual STOUT API
-                try:
-                    # Attempt batch processing (if STOUT supports it)
-                    if torch.cuda.is_available():
-                        with torch.cuda.amp.autocast(enabled=True):
-                            # This is theoretical - STOUT may not support list input
-                            batch_results = translate_forward(smiles_list)
-                            if isinstance(batch_results, list):
-                                results = [r if r else "No name found" for r in batch_results]
-                            else:
-                                raise NotImplementedError("STOUT doesn't support batch input")
-                    else:
-                        batch_results = translate_forward(smiles_list)
-                        results = [r if r else "No name found" for r in batch_results]
-                        
-                except (NotImplementedError, TypeError, Exception):
-                    # Fall back to optimized sequential processing
-                    logger.info("Falling back to optimized sequential STOUT processing")
-                    for smiles in smiles_list:
-                        try:
-                            if torch.cuda.is_available():
-                                with torch.cuda.amp.autocast(enabled=True):
-                                    result = translate_forward(smiles)
-                            else:
-                                result = translate_forward(smiles)
-                            results.append(result if result else "No name found")
-                        except Exception as e:
-                            logger.error(f"STOUT batch failed for {smiles}: {e}")
-                            results.append("No name found")
+                # Process each SMILES with caching
+                for smiles in smiles_list:
+                    try:
+                        # Use cached result if available, otherwise process
+                        result = cached_stout_translate(smiles)
+                        results.append(result if result else "No name found")
+                    except Exception as e:
+                        logger.error(f"STOUT batch failed for {smiles}: {e}")
+                        results.append("No name found")
                             
             finally:
                 torch.set_num_threads(original_threads)
@@ -284,12 +312,41 @@ async def ping():
 
 @app.get("/ready")  
 async def readiness_check():
-    """Lightweight readiness check - doesn't log or do expensive operations"""
-    return {
-        "status": "ready", 
-        "uptime": round(time.time() - _startup_time, 1),
-        "optimized": _stout_optimized
-    }
+    """Readiness check for Cloud Run with model loading status"""
+    try:
+        # Check if models are loaded
+        models_ready = _stout_optimized
+        
+        # Try to import startup optimizer to check background loading
+        try:
+            from startup_optimizer import optimizer
+            if optimizer and optimizer.is_ready():
+                models_ready = True
+        except ImportError:
+            pass
+        
+        if models_ready:
+            return {
+                "status": "ready", 
+                "uptime": round(time.time() - _startup_time, 1),
+                "optimized": _stout_optimized,
+                "models_loaded": True
+            }
+        else:
+            return {
+                "status": "loading", 
+                "uptime": round(time.time() - _startup_time, 1),
+                "optimized": _stout_optimized,
+                "models_loaded": False
+            }
+    except Exception as e:
+        return {
+            "status": "error", 
+            "uptime": round(time.time() - _startup_time, 1),
+            "optimized": _stout_optimized,
+            "models_loaded": False,
+            "error": str(e)
+        }
 
 @app.get("/test-stout")
 async def test_stout():
@@ -385,6 +442,18 @@ async def warmup():
         "startup_time": time.time() - _startup_time
     }
 
+@app.get("/cache-stats")
+async def cache_stats():
+    """Get cache statistics for monitoring"""
+    cache_info = cached_stout_translate.cache_info()
+    return {
+        "cache_hits": cache_info.hits,
+        "cache_misses": cache_info.misses,
+        "cache_size": cache_info.currsize,
+        "max_cache_size": cache_info.maxsize,
+        "hit_rate": cache_info.hits / (cache_info.hits + cache_info.misses) if (cache_info.hits + cache_info.misses) > 0 else 0
+    }
+
 @app.post("/api/name", response_model=NameResponse)
 async def get_molecule_name(req: NameRequest):
     """Main naming endpoint with optimized async processing"""
@@ -404,12 +473,21 @@ async def get_molecule_name(req: NameRequest):
 async def startup_event():
     """Startup event handler with optimization initialization"""
     logger.info("Chemical Naming API starting up...")
-    logger.info("STOUT models pre-loaded from cache")
     
-    # Initialize optimizations
+    # Start background model loading for faster perceived startup
+    try:
+        from startup_optimizer import start_optimization
+        optimizer = start_optimization()
+        logger.info("Background model pre-loading started")
+    except ImportError:
+        logger.info("Startup optimizer not available, using standard loading")
+        optimizer = None
+    
+    # Initialize optimizations (this will be faster now with lazy loading)
     optimize_stout_model()
     
     # Log optimization status
+    torch = lazy_import_torch()
     logger.info(f"PyTorch version: {torch.__version__}")
     logger.info(f"CUDA available: {torch.cuda.is_available()}")
     if torch.cuda.is_available():
@@ -420,6 +498,9 @@ async def startup_event():
     logger.info(f"LRU cache size: 1024")
     logger.info(f"Optimizations applied: {_stout_optimized}")
     logger.info(f"Startup time: {time.time() - _startup_time:.2f}s")
+    
+    if optimizer:
+        logger.info("Background model loading in progress...")
 
 @app.on_event("shutdown")
 async def shutdown_event():
