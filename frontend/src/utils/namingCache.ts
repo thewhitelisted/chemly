@@ -1,4 +1,4 @@
-import { buildApiUrl, apiConfig, makeAuthenticatedRequest } from '../config/api';
+import { apiConfig, makeAuthenticatedRequest } from '../config/api';
 
 interface CacheEntry {
   name: string | string[];
