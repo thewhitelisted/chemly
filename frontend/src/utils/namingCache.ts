@@ -1,4 +1,4 @@
-import { buildApiUrl, apiConfig } from '../config/api';
+import { buildApiUrl, apiConfig, makeAuthenticatedRequest } from '../config/api';
 
 interface CacheEntry {
   name: string | string[];
@@ -113,25 +113,25 @@ class NamingCache {
     
     console.log('Sending request:', { smiles, fragments, body });
     
-    const response = await fetch(buildApiUrl('/api/name'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal
-    });
+    try {
+      const response = await makeAuthenticatedRequest('/api/name', body, signal);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Request failed:', { status: response.status, error: errorText, body });
-      throw new Error(`Naming API request failed: ${response.status} - ${errorText}`);
-    }
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Request failed:', { status: response.status, error: errorText, body });
+        throw new Error(`Naming API request failed: ${response.status} - ${errorText}`);
+      }
 
-    const data = await response.json();
-    
-    if (Array.isArray(data.names)) {
-      return fragments.length === 1 ? data.names[0] : data.names;
-    } else {
-      return 'No name found';
+      const data = await response.json();
+      
+      if (Array.isArray(data.names)) {
+        return fragments.length === 1 ? data.names[0] : data.names;
+      } else {
+        return 'No name found';
+      }
+    } catch (error) {
+      console.error('Authenticated request failed:', error);
+      throw error;
     }
   }
 

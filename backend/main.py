@@ -1,13 +1,15 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Union, Optional
+from typing import List, Union, Optional, Dict
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 import asyncio
 import time
 import os
+import secrets
+from datetime import datetime, timedelta
 
 # Environment optimizations to reduce import warnings and improve performance
 os.environ['TOKENIZERS_PARALLELISM'] = 'false'  # Avoid tokenizer warnings
@@ -109,14 +111,57 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Chemical Naming API", version="1.0.0")
 
-# Add CORS middleware
+# Add CORS middleware - restricted to orgolab.ca domain
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://orgolab.ca",
+        "https://www.orgolab.ca",
+        "http://orgolab.ca",
+        "http://www.orgolab.ca"
+    ],
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
+
+# Session management
+sessions: Dict[str, dict] = {}
+
+def generate_session_id() -> str:
+    return secrets.token_urlsafe(32)
+
+def is_valid_session(session_id: str) -> bool:
+    if session_id not in sessions:
+        return False
+    
+    session = sessions[session_id]
+    if datetime.utcnow() > session["expires_at"]:
+        del sessions[session_id]  # Cleanup expired
+        return False
+    
+    return True
+
+async def cleanup_expired_sessions():
+    """Periodically clean up expired sessions"""
+    while True:
+        try:
+            current_time = datetime.utcnow()
+            expired_sessions = [
+                session_id for session_id, session in sessions.items()
+                if current_time > session["expires_at"]
+            ]
+            
+            for session_id in expired_sessions:
+                del sessions[session_id]
+            
+            if expired_sessions:
+                logger.info(f"Cleaned up {len(expired_sessions)} expired sessions")
+                
+        except Exception as e:
+            logger.error(f"Session cleanup error: {e}")
+        
+        await asyncio.sleep(300)  # Run every 5 minutes
 
 class NameRequest(BaseModel):
     smiles: Union[str, List[str]]
@@ -129,6 +174,11 @@ class HealthResponse(BaseModel):
     startup_time: float
     stout_loaded: bool
     version: str
+
+class SessionResponse(BaseModel):
+    token: str
+    expires_at: str
+    expires_in: int
 
 # Global variables
 _startup_time = time.time()
@@ -464,6 +514,59 @@ async def cache_stats():
         "hit_rate": cache_info.hits / (cache_info.hits + cache_info.misses) if (cache_info.hits + cache_info.misses) > 0 else 0
     }
 
+@app.post("/auth/session", response_model=SessionResponse)
+async def create_session(request: Request):
+    """Create a new session token for frontend access"""
+    # Validate domain
+    referer = request.headers.get("referer", "")
+    origin = request.headers.get("origin", "")
+    
+    allowed_domains = ["orgolab.ca", "www.orgolab.ca"]
+    is_valid = any(domain in referer or domain in origin for domain in allowed_domains)
+    
+    if not is_valid:
+        logger.warning(f"Invalid domain attempt: referer={referer}, origin={origin}")
+        raise HTTPException(status_code=403, detail="Unauthorized domain")
+    
+    # Create session
+    session_id = generate_session_id()
+    expires_at = datetime.utcnow() + timedelta(minutes=30)
+    
+    sessions[session_id] = {
+        "created_at": datetime.utcnow(),
+        "expires_at": expires_at,
+        "domain": referer or origin
+    }
+    
+    logger.info(f"Session created: {session_id[:8]}... for domain: {referer or origin}")
+    
+    return SessionResponse(
+        token=session_id,
+        expires_at=expires_at.isoformat(),
+        expires_in=1800  # 30 minutes in seconds
+    )
+
+@app.middleware("http")
+async def validate_session(request: Request, call_next):
+    """Middleware to validate session tokens for API endpoints"""
+    # Skip validation for health endpoints and session creation
+    if (request.url.path in ["/health", "/ping", "/ready", "/warmup", "/cache-stats"] or
+        request.url.path == "/auth/session" or
+        request.method == "OPTIONS"):
+        return await call_next(request)
+    
+    # Validate session for API endpoints
+    if request.url.path.startswith("/api/"):
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing authorization header")
+        
+        session_id = auth_header.replace("Bearer ", "")
+        if not is_valid_session(session_id):
+            raise HTTPException(status_code=401, detail="Invalid or expired session")
+    
+    return await call_next(request)
+
 @app.post("/api/name", response_model=NameResponse)
 async def get_molecule_name(req: NameRequest):
     """Main naming endpoint with optimized async processing"""
@@ -496,6 +599,10 @@ async def startup_event():
     # Initialize optimizations (this will be faster now with lazy loading)
     optimize_stout_model()
     
+    # Start session cleanup task
+    asyncio.create_task(cleanup_expired_sessions())
+    logger.info("Session cleanup task started")
+    
     # Log optimization status
     torch = lazy_import_torch()
     logger.info(f"PyTorch version: {torch.__version__}")
@@ -507,6 +614,7 @@ async def startup_event():
     logger.info(f"Thread pool workers: {executor._max_workers}")
     logger.info(f"LRU cache size: 1024")
     logger.info(f"Optimizations applied: {_stout_optimized}")
+    logger.info(f"Session management: enabled")
     logger.info(f"Startup time: {time.time() - _startup_time:.2f}s")
     
     if optimizer:

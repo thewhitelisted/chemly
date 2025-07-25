@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CORS Test</title>
+</head>
+<body>
+    <h1>CORS Test for orgolab.ca API</h1>
+    
+    <h2>Test 1: Allowed Origin (orgolab.ca)</h2>
+    <button onclick="testAllowedOrigin()">Test Allowed Origin</button>
+    <div id="result1"></div>
+    
+    <h2>Test 2: Blocked Origin (malicious-site.com)</h2>
+    <button onclick="testBlockedOrigin()">Test Blocked Origin</button>
+    <div id="result2"></div>
+    
+    <h2>Test 3: Direct Access (no referer)</h2>
+    <button onclick="testDirectAccess()">Test Direct Access</button>
+    <div id="result3"></div>
+    
+    <h2>Debug Info</h2>
+    <div id="debug"></div>
+    
+    <script>
+        // Show current origin
+        document.getElementById('debug').innerHTML = `
+            <p><strong>Current page origin:</strong> ${window.location.origin}</p>
+            <p><strong>Current page protocol:</strong> ${window.location.protocol}</p>
+            <p><strong>Current page hostname:</strong> ${window.location.hostname}</p>
+        `;
+        
+        async function testAllowedOrigin() {
+            const resultDiv = document.getElementById('result1');
+            resultDiv.innerHTML = 'Testing...';
+            
+            try {
+                const response = await fetch('https://api.orgolab.ca/api/name', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Origin': 'https://orgolab.ca',
+                        'Referer': 'https://orgolab.ca'
+                    },
+                    body: JSON.stringify({smiles: 'CCO'})
+                });
+                
+                const data = await response.json();
+                resultDiv.innerHTML = `<p style="color: green;">✅ SUCCESS: ${JSON.stringify(data)}</p>`;
+            } catch (error) {
+                resultDiv.innerHTML = `<p style="color: red;">❌ ERROR: ${error.message}</p>
+                <p><strong>Error details:</strong> ${error.toString()}</p>`;
+            }
+        }
+        
+        async function testBlockedOrigin() {
+            const resultDiv = document.getElementById('result2');
+            resultDiv.innerHTML = 'Testing...';
+            
+            try {
+                const response = await fetch('https://api.orgolab.ca/api/name', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Origin': 'https://malicious-site.com',
+                        'Referer': 'https://malicious-site.com'
+                    },
+                    body: JSON.stringify({smiles: 'CCO'})
+                });
+                
+                const data = await response.json();
+                resultDiv.innerHTML = `<p style="color: red;">❌ SHOULD BE BLOCKED: ${JSON.stringify(data)}</p>`;
+            } catch (error) {
+                resultDiv.innerHTML = `<p style="color: green;">✅ CORRECTLY BLOCKED: ${error.message}</p>
+                <p><strong>Error details:</strong> ${error.toString()}</p>`;
+            }
+        }
+        
+        async function testDirectAccess() {
+            const resultDiv = document.getElementById('result3');
+            resultDiv.innerHTML = 'Testing...';
+            
+            try {
+                const response = await fetch('https://api.orgolab.ca/api/name', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                        // No referer header - simulating direct access
+                    },
+                    body: JSON.stringify({smiles: 'CCO'})
+                });
+                
+                const data = await response.json();
+                resultDiv.innerHTML = `<p style="color: red;">❌ SHOULD BE BLOCKED: ${JSON.stringify(data)}</p>`;
+            } catch (error) {
+                resultDiv.innerHTML = `<p style="color: green;">✅ CORRECTLY BLOCKED: ${error.message}</p>
+                <p><strong>Error details:</strong> ${error.toString()}</p>`;
+            }
+        }
+    </script>
+</body>
+</html> 
