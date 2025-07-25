@@ -15,7 +15,7 @@ const configs: Record<string, ApiConfig> = {
     timeout: 45000, // 45 seconds for development
   },
   production: {
-    baseUrl: 'https://orgodraw-154315492861.us-east4.run.app',
+    baseUrl: 'https://api.orgodraw.com',
     timeout: 45000, // 45 seconds for production
   },
 };
