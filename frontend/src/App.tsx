@@ -14,6 +14,8 @@ import * as OCL from 'openchemlib';
 import { HydrogenManager } from './utils/hydrogenManager';
 import Navbar from './components/Navbar';
 import ScrollToTop from './components/ScrollToTop';
+import { AuthProvider } from './contexts/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
 
 import { useHistory } from './hooks/useHistory';
 
@@ -77,50 +79,54 @@ function App() {
   };
 
   return (
-    <Router>
-      <ScrollToTop />
-      {/* Only show Navbar on non-app routes */}
-      <Routes>
-        <Route path="/app" element={
-          <div className="flex h-screen bg-white dark:bg-zinc-900 transition-colors">
-            <Toolbar
-              selectedElement={selectedElement}
-              selectedTool={selectedTool}
-              onElementSelect={el => {
-                setSelectedElement(el);
-                setSelectedTool('atom');
-              }}
-              onToolSelect={setSelectedTool}
-              onCleanStructure={handleCleanStructure}
-              darkMode={darkMode}
-              onToggleDarkMode={() => setDarkMode(dm => !dm)}
-            />
-            <ChemCanvas
-              molecule={molecule}
-              selectedTool={selectedTool}
-              selectedElement={selectedElement}
-              canvasOffset={canvasOffset}
-              scale={scale}
-              onMoleculeChange={setMolecule}
-              onCanvasTransformChange={(offset, newScale) => {
-                setCanvasOffset(offset);
-                setScale(newScale);
-              }}
-              undo={undo}
-              redo={redo}
-              canUndo={canUndo}
-              canRedo={canRedo}
-            />
-            <Sidebar
-              molecule={molecule}
-              onMoleculeChange={setMolecule}
-            />
-          </div>
-        } />
-        {/* Navbar for all other routes */}
-        <Route path="/*" element={<><Navbar /><Routes><Route path="/" element={<LandingPage />} /><Route path="/products" element={<Products />} /><Route path="/about" element={<About />} /><Route path="/contact" element={<Contact />} /><Route path="/pricing" element={<Pricing />} /></Routes></>} />
-      </Routes>
-    </Router>
+    <AuthProvider>
+      <Router>
+        <ScrollToTop />
+        {/* Only show Navbar on non-app routes */}
+        <Routes>
+          <Route path="/app" element={
+            <ProtectedRoute>
+              <div className="flex h-screen bg-white dark:bg-zinc-900 transition-colors">
+                <Toolbar
+                  selectedElement={selectedElement}
+                  selectedTool={selectedTool}
+                  onElementSelect={el => {
+                    setSelectedElement(el);
+                    setSelectedTool('atom');
+                  }}
+                  onToolSelect={setSelectedTool}
+                  onCleanStructure={handleCleanStructure}
+                  darkMode={darkMode}
+                  onToggleDarkMode={() => setDarkMode(dm => !dm)}
+                />
+                <ChemCanvas
+                  molecule={molecule}
+                  selectedTool={selectedTool}
+                  selectedElement={selectedElement}
+                  canvasOffset={canvasOffset}
+                  scale={scale}
+                  onMoleculeChange={setMolecule}
+                  onCanvasTransformChange={(offset, newScale) => {
+                    setCanvasOffset(offset);
+                    setScale(newScale);
+                  }}
+                  undo={undo}
+                  redo={redo}
+                  canUndo={canUndo}
+                  canRedo={canRedo}
+                />
+                <Sidebar
+                  molecule={molecule}
+                  onMoleculeChange={setMolecule}
+                />
+              </div>
+            </ProtectedRoute>
+          } />
+          {/* Navbar for all other routes */}
+          <Route path="/*" element={<><Navbar /><Routes><Route path="/" element={<LandingPage />} /><Route path="/products" element={<Products />} /><Route path="/about" element={<About />} /><Route path="/contact" element={<Contact />} /><Route path="/pricing" element={<Pricing />} /></Routes></>} />
+        </Routes>
+      </Router>
+    </AuthProvider>
   );
 }
 

@@ -1,6 +1,9 @@
 import { Link } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function LandingPage() {
+  const { user } = useAuth();
+  
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#fffae2] via-[#e0f7f4] to-[#f8fafc] flex flex-col font-sans pt-24">
       {/* Modern Glassy Navbar */}
@@ -22,8 +25,13 @@ export default function LandingPage() {
             to="/app"
             className="inline-block bg-gradient-to-r from-[#007d40] to-[#0097b2] text-[#fffae2] px-10 py-4 rounded-full font-extrabold text-2xl shadow-2xl hover:scale-105 hover:shadow-3xl transition-transform duration-200 border-4 border-white/40"
           >
-            Try OrgoDraw today
+            {user ? 'Launch OrgoDraw' : 'Try OrgoDraw today'}
           </Link>
+          {!user && (
+            <p className="text-[#007d40] text-lg font-medium">
+              Sign up for free and get 100 API calls per month
+            </p>
+          )}
         </div>
       </section>
       {/* Footer */}

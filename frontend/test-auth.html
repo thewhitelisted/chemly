@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auth Test - OrgoLab</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: white;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 30px;
+            margin: 20px 0;
+        }
+        button {
+            background: linear-gradient(45deg, #007d40, #0097b2);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 10px;
+            font-size: 16px;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        .result {
+            background: rgba(0,0,0,0.2);
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            white-space: pre-wrap;
+        }
+        .error {
+            background: rgba(255,0,0,0.2);
+            border-left: 4px solid #ff4444;
+        }
+        .success {
+            background: rgba(0,255,0,0.2);
+            border-left: 4px solid #44ff44;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 OrgoLab Authentication Test</h1>
+        <p>Test the authentication endpoints before deploying to production.</p>
+    </div>
+
+    <div class="container">
+        <h2>Test 1: User Registration</h2>
+        <input type="email" id="regEmail" placeholder="Email for registration" value="test@example.com">
+        <input type="password" id="regPassword" placeholder="Password" value="testpassword123">
+        <button onclick="testRegistration()">Register User</button>
+        <div id="regResult" class="result"></div>
+    </div>
+
+    <div class="container">
+        <h2>Test 2: User Login</h2>
+        <input type="email" id="loginEmail" placeholder="Email for login" value="test@example.com">
+        <input type="password" id="loginPassword" placeholder="Password" value="testpassword123">
+        <button onclick="testLogin()">Login User</button>
+        <div id="loginResult" class="result"></div>
+    </div>
+
+    <div class="container">
+        <h2>Test 3: Get User Info (Requires Token)</h2>
+        <input type="text" id="authToken" placeholder="JWT Token from login" readonly>
+        <button onclick="testGetUser()">Get User Info</button>
+        <div id="userResult" class="result"></div>
+    </div>
+
+    <div class="container">
+        <h2>Test 4: API Call with Authentication</h2>
+        <input type="text" id="apiSmiles" placeholder="SMILES string" value="CCO">
+        <button onclick="testApiCall()">Test API Call</button>
+        <div id="apiResult" class="result"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://api.orgolab.ca';
+
+        function showResult(elementId, data, isError = false) {
+            const element = document.getElementById(elementId);
+            element.textContent = JSON.stringify(data, null, 2);
+            element.className = `result ${isError ? 'error' : 'success'}`;
+        }
+
+        async function testRegistration() {
+            const email = document.getElementById('regEmail').value;
+            const password = document.getElementById('regPassword').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/auth/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult('regResult', { success: true, data });
+                    document.getElementById('authToken').value = data.access_token;
+                } else {
+                    showResult('regResult', { error: data.detail || 'Registration failed' }, true);
+                }
+            } catch (error) {
+                showResult('regResult', { error: error.message }, true);
+            }
+        }
+
+        async function testLogin() {
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult('loginResult', { success: true, data });
+                    document.getElementById('authToken').value = data.access_token;
+                } else {
+                    showResult('loginResult', { error: data.detail || 'Login failed' }, true);
+                }
+            } catch (error) {
+                showResult('loginResult', { error: error.message }, true);
+            }
+        }
+
+        async function testGetUser() {
+            const token = document.getElementById('authToken').value;
+            
+            if (!token) {
+                showResult('userResult', { error: 'No token available. Please login first.' }, true);
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/auth/me`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult('userResult', { success: true, data });
+                } else {
+                    showResult('userResult', { error: data.detail || 'Failed to get user info' }, true);
+                }
+            } catch (error) {
+                showResult('userResult', { error: error.message }, true);
+            }
+        }
+
+        async function testApiCall() {
+            const token = document.getElementById('authToken').value;
+            const smiles = document.getElementById('apiSmiles').value;
+            
+            if (!token) {
+                showResult('apiResult', { error: 'No token available. Please login first.' }, true);
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/name`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ smiles })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult('apiResult', { success: true, data });
+                } else {
+                    showResult('apiResult', { error: data.detail || 'API call failed' }, true);
+                }
+            } catch (error) {
+                showResult('apiResult', { error: error.message }, true);
+            }
+        }
+    </script>
+</body>
+</html> 

@@ -10,7 +10,7 @@ spec:
     metadata:
       annotations:
         # Resource allocation - optimized for ML workloads
-        run.googleapis.com/cpu: "2"
+        run.googleapis.com/cpu: "8"
         run.googleapis.com/memory: "4Gi"
         
         # Scaling configuration - pay per request (cold starts on every traffic spike)
@@ -41,10 +41,10 @@ spec:
           value: "production"
         resources:
           limits:
-            cpu: "2"
+            cpu: "8"
             memory: "4Gi"
           requests:
-            cpu: "1"      # Minimum guaranteed
+            cpu: "4"      # Minimum guaranteed
             memory: "2Gi" # Minimum guaranteed
         
         # Optimized health checks - minimize requests for cost efficiency

@@ -4,11 +4,7 @@ interface ApiConfig {
   timeout: number;
 }
 
-interface SessionToken {
-  token: string;
-  expires_at: string;
-  expires_in: number;
-}
+// SessionToken interface removed - not used
 
 // Environment detection
 const isDevelopment = import.meta.env.DEV;
@@ -38,61 +34,26 @@ const getCurrentConfig = (): ApiConfig => {
 export const apiConfig = getCurrentConfig();
 
 class ApiClient {
-  private sessionToken: SessionToken | null = null;
-  private tokenRefreshPromise: Promise<SessionToken> | null = null;
+  private authToken: string | null = null;
 
-  async getSessionToken(): Promise<string> {
-    // Check if we have a valid token
-    if (this.sessionToken && new Date(this.sessionToken.expires_at) > new Date()) {
-      return this.sessionToken.token;
-    }
-
-    // If already refreshing, wait for that promise
-    if (this.tokenRefreshPromise) {
-      const token = await this.tokenRefreshPromise;
-      return token.token;
-    }
-
-    // Start new refresh
-    this.tokenRefreshPromise = this.refreshSessionToken();
-    try {
-      const token = await this.tokenRefreshPromise;
-      return token.token;
-    } finally {
-      this.tokenRefreshPromise = null;
-    }
+  setAuthToken(token: string) {
+    this.authToken = token;
   }
 
-  private async refreshSessionToken(): Promise<SessionToken> {
-    try {
-      const response = await fetch(`${apiConfig.baseUrl}/auth/session`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to get session token: ${response.status}`);
-      }
-
-      const sessionData = await response.json();
-      this.sessionToken = sessionData;
-      return sessionData;
-    } catch (error) {
-      console.error('Session token refresh failed:', error);
-      throw error;
-    }
+  clearAuthToken() {
+    this.authToken = null;
   }
 
   async makeRequest(endpoint: string, data: any, signal?: AbortSignal): Promise<Response> {
-    const token = await this.getSessionToken();
+    if (!this.authToken) {
+      throw new Error('No authentication token available');
+    }
     
     return fetch(`${apiConfig.baseUrl}${endpoint}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        'Authorization': `Bearer ${this.authToken}`,
       },
       body: JSON.stringify(data),
       signal,

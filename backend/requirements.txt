@@ -10,10 +10,8 @@ httpx==0.25.2
 stout-pypi==2.0.5
 pubchempy==1.0.4
 
-# PyTorch for optimizations (CPU version by default, GPU if available)
+# PyTorch for optimizations (CPU version)
 torch>=2.0.0
-# If you have GPU, you can specify CUDA version:
-# torch>=2.0.0+cu118 --index-url https://download.pytorch.org/whl/cu118
 
 # Performance optimizations for uvicorn
 uvloop==0.19.0
@@ -21,6 +19,15 @@ httptools==0.6.1
 
 # Environment handling
 python-dotenv==1.0.0
+
+# Authentication and security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+
+# Firestore database
+google-cloud-firestore==2.13.1
+google-auth==2.23.4
 
 # Optional: Memory profiling (useful for optimization)
 psutil==5.9.6 

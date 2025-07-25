@@ -22,7 +22,7 @@ gcloud run deploy $SERVICE_NAME \
   --region $REGION \
   --allow-unauthenticated \
   --memory 4Gi \
-  --cpu 2 \
+  --cpu 8 \
   --min-instances 1 \
   --max-instances 10 \
   --timeout 300 \
@@ -52,7 +52,7 @@ echo "💡 For development/testing, use this lower-resource command instead:"
 echo "gcloud run deploy $SERVICE_NAME \\"
 echo "  --image gcr.io/$PROJECT_ID/$SERVICE_NAME:latest \\"
 echo "  --memory 2Gi \\"
-echo "  --cpu 1 \\"
+echo "  --cpu 2 \\"
 echo "  --min-instances 0 \\"
 echo "  --max-instances 5 \\"
 echo "  --timeout 180" 

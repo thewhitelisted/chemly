@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
-import { Copy, Download, FileText, AlertTriangle, Lightbulb, Upload } from 'lucide-react';
+import { Copy, Download, FileText, AlertTriangle, Lightbulb, Upload, LogOut, User } from 'lucide-react';
 import type { Molecule, ValidationWarning } from '../types/chemistry';
 import { importFromSmiles } from '../utils/smilesToGraph';
 import { validateStructure } from '../utils/validateStructure';
 import { namingCache } from '../utils/namingCache';
 import { createNamingDebouncer } from '../utils/smartDebouncer';
 import { useSmilesOptimization } from '../utils/useSmilesOptimization';
+import { useAuth } from '../contexts/AuthContext';
+import { apiClient } from '../config/api';
 
 
 interface SidebarProps {
@@ -14,6 +16,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
+  const { user, logout } = useAuth();
   const [smilesInput, setSmilesInput] = useState('');
   const [promptInput, setPromptInput] = useState('');
   const [copied, setCopied] = useState(false);
@@ -24,6 +27,14 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
   });
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [moleculeName, setMoleculeName] = useState<string | string[]>('');
+
+  // Set auth token for API client
+  useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      apiClient.setAuthToken(token);
+    }
+  }, []);
 
   // Use optimized SMILES generation
   const { smiles: currentSmiles, isLoading: isExporting } = useSmilesOptimization(molecule);
@@ -312,6 +323,39 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
             <div className="flex justify-between">
               <span>Non-H atoms:</span>
               <span className="font-mono">{molecule.atoms.filter(a => a.element !== 'H').length}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* User Info and Logout */}
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+          <User className="w-4 h-4" />
+          <span className="dark:text-gray-100">Account</span>
+        </h3>
+        <div className="p-3 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-md">
+          <div className="space-y-2 text-sm text-gray-700 dark:text-gray-100">
+            <div className="flex justify-between items-center">
+              <span>Email:</span>
+              <span className="font-medium truncate ml-2">{user?.email}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span>Plan:</span>
+              <span className="font-medium capitalize">{user?.subscription_plan}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span>API Calls:</span>
+              <span className="font-mono">{user?.api_calls_used || 0} / {user?.api_calls_limit || 100}</span>
+            </div>
+            <div className="pt-2 border-t border-gray-200 dark:border-zinc-600">
+              <button
+                onClick={logout}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20 rounded-md transition-colors duration-200"
+              >
+                <LogOut className="w-4 h-4" />
+                Sign Out
+              </button>
             </div>
           </div>
         </div>

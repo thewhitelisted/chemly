@@ -1,5 +1,6 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import List, Union, Optional, Dict
 import logging
@@ -10,6 +11,11 @@ import time
 import os
 import secrets
 from datetime import datetime, timedelta
+
+# Import authentication modules
+from auth_models import UserCreate, UserLogin, UserResponse, Token
+from auth_service import auth_service
+from database import db_service
 
 # Environment optimizations to reduce import warnings and improve performance
 os.environ['TOKENIZERS_PARALLELISM'] = 'false'  # Avoid tokenizer warnings
@@ -125,43 +131,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Session management
-sessions: Dict[str, dict] = {}
+# Security
+security = HTTPBearer()
 
-def generate_session_id() -> str:
-    return secrets.token_urlsafe(32)
+# Dependency to get current user
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+    """Get current authenticated user"""
+    token = credentials.credentials
+    user = await auth_service.validate_session(token)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user
 
-def is_valid_session(session_id: str) -> bool:
-    if session_id not in sessions:
-        return False
-    
-    session = sessions[session_id]
-    if datetime.utcnow() > session["expires_at"]:
-        del sessions[session_id]  # Cleanup expired
-        return False
-    
-    return True
-
-async def cleanup_expired_sessions():
-    """Periodically clean up expired sessions"""
-    while True:
-        try:
-            current_time = datetime.utcnow()
-            expired_sessions = [
-                session_id for session_id, session in sessions.items()
-                if current_time > session["expires_at"]
-            ]
-            
-            for session_id in expired_sessions:
-                del sessions[session_id]
-            
-            if expired_sessions:
-                logger.info(f"Cleaned up {len(expired_sessions)} expired sessions")
-                
-        except Exception as e:
-            logger.error(f"Session cleanup error: {e}")
-        
-        await asyncio.sleep(300)  # Run every 5 minutes
+# Dependency to check user API limits
+async def check_api_limits(user: dict = Depends(get_current_user)) -> dict:
+    """Check if user has API calls remaining"""
+    usage = await db_service.get_user_usage(user["id"])
+    if usage.get("api_calls_used", 0) >= usage.get("api_calls_limit", 100):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="API call limit exceeded. Please upgrade your plan."
+        )
+    return user
 
 class NameRequest(BaseModel):
     smiles: Union[str, List[str]]
@@ -514,68 +509,104 @@ async def cache_stats():
         "hit_rate": cache_info.hits / (cache_info.hits + cache_info.misses) if (cache_info.hits + cache_info.misses) > 0 else 0
     }
 
-@app.post("/auth/session", response_model=SessionResponse)
-async def create_session(request: Request):
-    """Create a new session token for frontend access"""
-    # Validate domain
-    referer = request.headers.get("referer", "")
-    origin = request.headers.get("origin", "")
-    
-    allowed_domains = ["orgolab.ca", "www.orgolab.ca"]
-    is_valid = any(domain in referer or domain in origin for domain in allowed_domains)
-    
-    if not is_valid:
-        logger.warning(f"Invalid domain attempt: referer={referer}, origin={origin}")
-        raise HTTPException(status_code=403, detail="Unauthorized domain")
-    
-    # Create session
-    session_id = generate_session_id()
-    expires_at = datetime.utcnow() + timedelta(minutes=30)
-    
-    sessions[session_id] = {
-        "created_at": datetime.utcnow(),
-        "expires_at": expires_at,
-        "domain": referer or origin
-    }
-    
-    logger.info(f"Session created: {session_id[:8]}... for domain: {referer or origin}")
-    
-    return SessionResponse(
-        token=session_id,
-        expires_at=expires_at.isoformat(),
-        expires_in=1800  # 30 minutes in seconds
+@app.post("/auth/register", response_model=Token)
+async def register_user(user: UserCreate):
+    """Register a new user"""
+    try:
+        # Hash the password
+        hashed_password = auth_service.get_password_hash(user.password)
+        
+        # Create user in database
+        user_id = await db_service.create_user(user.email, hashed_password)
+        
+        # Create session token
+        access_token = await auth_service.create_user_session(user_id)
+        
+        return Token(
+            access_token=access_token,
+            token_type="bearer",
+            expires_in=1800  # 30 minutes
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Registration error: {e}")
+        raise HTTPException(status_code=500, detail="Registration failed")
+
+@app.post("/auth/login", response_model=Token)
+async def login_user(user: UserLogin):
+    """Login user and return access token"""
+    try:
+        # Authenticate user
+        authenticated_user = await auth_service.authenticate_user(user.email, user.password)
+        if not authenticated_user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # Create session token
+        access_token = await auth_service.create_user_session(authenticated_user["id"])
+        
+        return Token(
+            access_token=access_token,
+            token_type="bearer",
+            expires_in=1800  # 30 minutes
+        )
+    except Exception as e:
+        logger.error(f"Login error: {e}")
+        raise HTTPException(status_code=500, detail="Login failed")
+
+@app.get("/auth/me", response_model=UserResponse)
+async def get_current_user_info(current_user: dict = Depends(get_current_user)):
+    """Get current user information"""
+    return UserResponse(
+        id=current_user["id"],
+        email=current_user["email"],
+        subscription_plan=current_user.get("subscription_plan", "free"),
+        api_calls_used=current_user.get("api_calls_used", 0),
+        api_calls_limit=current_user.get("api_calls_limit", 100),
+        created_at=current_user["created_at"]
     )
 
-@app.middleware("http")
-async def validate_session(request: Request, call_next):
-    """Middleware to validate session tokens for API endpoints"""
-    # Skip validation for health endpoints and session creation
-    if (request.url.path in ["/health", "/ping", "/ready", "/warmup", "/cache-stats"] or
-        request.url.path == "/auth/session" or
-        request.method == "OPTIONS"):
-        return await call_next(request)
-    
-    # Validate session for API endpoints
-    if request.url.path.startswith("/api/"):
-        auth_header = request.headers.get("Authorization", "")
-        if not auth_header.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Missing authorization header")
-        
-        session_id = auth_header.replace("Bearer ", "")
-        if not is_valid_session(session_id):
-            raise HTTPException(status_code=401, detail="Invalid or expired session")
-    
-    return await call_next(request)
+@app.get("/auth/usage")
+async def get_user_usage(current_user: dict = Depends(get_current_user)):
+    """Get user's API usage statistics"""
+    usage = await db_service.get_user_usage(current_user["id"])
+    return usage
+
+@app.post("/auth/logout")
+async def logout_user(current_user: dict = Depends(get_current_user)):
+    """Logout user"""
+    # Note: JWT tokens can't be invalidated server-side
+    # This is mainly for audit logging
+    logger.info(f"User logged out: {current_user['email']}")
+    return {"message": "Logged out successfully"}
 
 @app.post("/api/name", response_model=NameResponse)
-async def get_molecule_name(req: NameRequest):
-    """Main naming endpoint with optimized async processing"""
+async def get_molecule_name(req: NameRequest, user: dict = Depends(check_api_limits)):
+    """Main naming endpoint with authentication and usage tracking"""
     smiles_list = req.smiles if isinstance(req.smiles, list) else [req.smiles]
-    logger.info(f"Processing {len(smiles_list)} SMILES strings")
+    logger.info(f"Processing {len(smiles_list)} SMILES strings for user {user['email']}")
+    
+    start_time = time.time()
     
     try:
         # Process all SMILES concurrently
         names = await get_molecule_names_batch_async(smiles_list)
+        
+        # Track API usage
+        response_time = time.time() - start_time
+        
+        # Increment API call count
+        await db_service.increment_api_calls(user["id"])
+        
+        # Log API call for analytics
+        for smiles, name in zip(smiles_list, names):
+            await db_service.log_api_call(user["id"], smiles, name, response_time)
+        
+        logger.info(f"API call completed for user {user['email']}: {len(smiles_list)} molecules in {response_time:.2f}s")
         
         return {"names": names}
     except Exception as e:
@@ -599,9 +630,9 @@ async def startup_event():
     # Initialize optimizations (this will be faster now with lazy loading)
     optimize_stout_model()
     
-    # Start session cleanup task
-    asyncio.create_task(cleanup_expired_sessions())
-    logger.info("Session cleanup task started")
+    # Start database cleanup task
+    asyncio.create_task(cleanup_database())
+    logger.info("Database cleanup task started")
     
     # Log optimization status
     torch = lazy_import_torch()
@@ -614,11 +645,28 @@ async def startup_event():
     logger.info(f"Thread pool workers: {executor._max_workers}")
     logger.info(f"LRU cache size: 1024")
     logger.info(f"Optimizations applied: {_stout_optimized}")
-    logger.info(f"Session management: enabled")
+    logger.info(f"Authentication: enabled with Firestore")
     logger.info(f"Startup time: {time.time() - _startup_time:.2f}s")
     
     if optimizer:
         logger.info("Background model loading in progress...")
+
+async def cleanup_database():
+    """Periodically clean up expired sessions and old data"""
+    while True:
+        try:
+            # Clean up expired sessions
+            expired_count = await db_service.cleanup_expired_sessions()
+            
+            # Add other cleanup tasks here as needed
+            
+            if expired_count > 0:
+                logger.info(f"Database cleanup: removed {expired_count} expired sessions")
+                
+        except Exception as e:
+            logger.error(f"Database cleanup error: {e}")
+        
+        await asyncio.sleep(300)  # Run every 5 minutes
 
 @app.on_event("shutdown")
 async def shutdown_event():
