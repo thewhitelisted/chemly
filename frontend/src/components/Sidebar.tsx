@@ -344,9 +344,15 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
               <span>Plan:</span>
               <span className="font-medium capitalize">{user?.subscription_plan}</span>
             </div>
-            <div className="flex justify-between items-center">
-              <span>API Calls:</span>
-              <span className="font-mono">{user?.api_calls_used || 0} / {user?.api_calls_limit || 100}</span>
+            <div className="space-y-1">
+              <div className="flex justify-between items-center">
+                <span>Basic Credits:</span>
+                <span className="font-mono">{user?.basic_credits_used || 0} / {user?.basic_credits_limit || 200}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span>Premium Credits:</span>
+                <span className="font-mono">{user?.premium_credits_used || 0} / {user?.premium_credits_limit || 35}</span>
+              </div>
             </div>
             <div className="pt-2 border-t border-gray-200 dark:border-zinc-600">
               <button

@@ -6,9 +6,21 @@ interface User {
   id: string;
   email: string;
   subscription_plan: string;
-  api_calls_used: number;
-  api_calls_limit: number;
+  basic_credits_used: number;
+  basic_credits_limit: number;
+  premium_credits_used: number;
+  premium_credits_limit: number;
   created_at: string;
+}
+
+interface CreditUsage {
+  basic_credits_used: number;
+  basic_credits_limit: number;
+  premium_credits_used: number;
+  premium_credits_limit: number;
+  subscription_plan: string;
+  last_credit_usage?: string;
+  monthly_reset_date?: string;
 }
 
 interface AuthContextType {
@@ -18,6 +30,8 @@ interface AuthContextType {
   login: (token: string) => void;
   logout: () => void;
   updateUser: (userData: User) => void;
+  refreshUserData: () => Promise<void>;
+  getCreditUsage: () => Promise<CreditUsage | null>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -91,6 +105,44 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setUser(userData);
   };
 
+  const refreshUserData = async () => {
+    if (!token) return;
+
+    try {
+      const response = await fetch(`${apiConfig.baseUrl}/auth/me`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
+        setUser(userData);
+      }
+    } catch (error) {
+      console.error('Error refreshing user data:', error);
+    }
+  };
+
+  const getCreditUsage = async (): Promise<CreditUsage | null> => {
+    if (!token) return null;
+
+    try {
+      const response = await fetch(`${apiConfig.baseUrl}/auth/usage`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+    } catch (error) {
+      console.error('Error fetching credit usage:', error);
+    }
+    return null;
+  };
+
   const value: AuthContextType = {
     user,
     token,
@@ -98,6 +150,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     login,
     logout,
     updateUser,
+    refreshUserData,
+    getCreditUsage,
   };
 
   return (

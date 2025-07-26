@@ -19,15 +19,11 @@ from database import db_service
 
 # Environment optimizations to reduce import warnings and improve performance
 os.environ['TOKENIZERS_PARALLELISM'] = 'false'  # Avoid tokenizer warnings
-os.environ['OMP_NUM_THREADS'] = '2'  # Optimize for better parallelism
-os.environ['TORCH_CUDNN_BENCHMARK'] = '1'  # Optimize CUDA performance
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Reduce TensorFlow logging
-os.environ['CUDA_VISIBLE_DEVICES'] = ''  # Disable CUDA if not needed
 
 # Lazy loading setup - don't import heavy packages until needed
 _stout_imported = False
 _pubchempy_imported = False
-_torch_imported = False
 
 def lazy_import_pubchempy():
     """Lazy import pubchempy (fast) to avoid startup delays"""
@@ -44,21 +40,6 @@ def lazy_import_pubchempy():
         import pubchempy
         return pubchempy
 
-def lazy_import_torch():
-    """Lazy import torch (slow) to avoid startup delays"""
-    global _torch_imported
-    if not _torch_imported:
-        try:
-            import torch
-            _torch_imported = True
-            return torch
-        except ImportError as e:
-            logging.error(f"Failed to import torch: {e}")
-            raise
-    else:
-        import torch
-        return torch
-
 def lazy_import_stout():
     """Lazy import STOUT (slowest) to avoid startup delays"""
     global _stout_imported
@@ -74,43 +55,9 @@ def lazy_import_stout():
         from STOUT import translate_forward
         return translate_forward
 
-# Global STOUT optimization setup - will be initialized when first needed
-_stout_device = None
-_stout_optimized = False
-_stout_model = None
-
-def optimize_stout_model():
-    """Apply CPU-optimized settings for STOUT model"""
-    global _stout_optimized, _stout_device
-    
-    if _stout_optimized:
-        return
-        
-    try:
-        torch = lazy_import_torch()
-        logger.info("Applying CPU-optimized STOUT settings...")
-        
-        # CPU-only device
-        _stout_device = torch.device('cpu')
-        
-        # CPU-optimized torch settings
-        torch.set_num_threads(4)  # Optimal for Cloud Run vCPU
-        torch.set_float32_matmul_precision('medium')  # Faster CPU matmul
-        
-        # Try to enable torch.compile if available (PyTorch 2.0+)
-        if hasattr(torch, 'compile'):
-            logger.info("Enabling torch.compile() optimization for CPU...")
-            # Note: STOUT's internal model compilation would need access to the actual model
-            # This is a placeholder for when STOUT exposes model compilation
-        
-        # CPU memory optimization
-        torch.backends.cudnn.enabled = False  # Disable CUDA optimizations
-        
-        _stout_optimized = True
-        logger.info("CPU-optimized STOUT settings applied successfully")
-        
-    except Exception as e:
-        logger.warning(f"Could not apply CPU optimizations: {e}")
+# Simple thread pool for async operations
+executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="chemly")
+_startup_time = time.time()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -122,11 +69,11 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://orgolab.ca",
-        "https://www.orgolab.ca",
+        "https://www.orgolab.ca", 
         "http://orgolab.ca",
         "http://www.orgolab.ca"
     ],
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
@@ -147,14 +94,17 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         )
     return user
 
-# Dependency to check user API limits
-async def check_api_limits(user: dict = Depends(get_current_user)) -> dict:
-    """Check if user has API calls remaining"""
-    usage = await db_service.get_user_usage(user["id"])
-    if usage.get("api_calls_used", 0) >= usage.get("api_calls_limit", 100):
+# Dependency to check user credit limits
+async def check_credit_limits(user: dict = Depends(get_current_user)) -> dict:
+    """Check if user has credits remaining"""
+    usage = await db_service.get_user_credit_usage(user["id"])
+    basic_remaining = usage.get("basic_credits_limit", 0) - usage.get("basic_credits_used", 0)
+    premium_remaining = usage.get("premium_credits_limit", 0) - usage.get("premium_credits_used", 0)
+    
+    if basic_remaining <= 0 and premium_remaining <= 0:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="API call limit exceeded. Please upgrade your plan."
+            detail="All credits exhausted. Please upgrade your plan or wait for monthly reset."
         )
     return user
 
@@ -175,52 +125,29 @@ class SessionResponse(BaseModel):
     expires_at: str
     expires_in: int
 
-# Global variables
-_startup_time = time.time()
-
-# Optimized ThreadPoolExecutor - more workers for better STOUT parallelization
-executor = ThreadPoolExecutor(max_workers=6, thread_name_prefix="naming-worker")
-
-# STOUT Batch Processing Cache
-_stout_batch_cache = {}
-_stout_batch_lock = asyncio.Lock()
-
 # Enhanced LRU cache with better size for Cloud Run memory limits
 @lru_cache(maxsize=1024)  # Increased cache size further
 def cached_stout_translate(smiles: str) -> str:
-    """Cached STOUT translation with advanced optimizations"""
-    if not _stout_optimized:
-        optimize_stout_model()
-        
-    logger.info(f"Starting optimized STOUT translation for SMILES: {smiles}")
+    """Simple cached STOUT translation without PyTorch optimizations"""
+    logger.info(f"Starting STOUT translation for SMILES: {smiles}")
     start_time = time.time()
     
     try:
-        logger.info("Calling optimized STOUT translate_forward...")
+        logger.info("Calling STOUT translate_forward...")
         
         # Lazy import STOUT
         translate_forward = lazy_import_stout()
-        torch = lazy_import_torch()
         
-        # CPU-optimized STOUT Performance Optimizations
-        with torch.no_grad():
-            # Set optimal thread count for CPU inference
-            original_threads = torch.get_num_threads()
-            torch.set_num_threads(2)  # Optimal for single molecule CPU processing
-            
-            try:
-                # CPU-only inference (no GPU optimizations)
-                iupac_name = translate_forward(smiles)
-            finally:
-                torch.set_num_threads(original_threads)
+        # Simple STOUT call without PyTorch optimizations
+        iupac_name = translate_forward(smiles)
         
         elapsed_time = time.time() - start_time
-        logger.info(f"Optimized STOUT completed in {elapsed_time:.2f}s for {smiles}: {iupac_name}")
+        logger.info(f"STOUT completed in {elapsed_time:.2f}s for {smiles}: {iupac_name}")
         
         return iupac_name if iupac_name else "No name found"
     except Exception as e:
         elapsed_time = time.time() - start_time
-        logger.error(f"Optimized STOUT failed after {elapsed_time:.2f}s for SMILES '{smiles}': {e}")
+        logger.error(f"STOUT failed after {elapsed_time:.2f}s for SMILES '{smiles}': {e}")
         return "No name found"
 
 async def pubchem_name_from_smiles(smiles: str) -> Optional[str]:
@@ -251,43 +178,30 @@ async def pubchem_name_from_smiles(smiles: str) -> Optional[str]:
 
 def true_batch_stout_translate(smiles_list: List[str]) -> List[str]:
     """
-    CPU-optimized batch STOUT translation with caching
+    Simple batch STOUT translation with caching
     Uses cached results when available, processes new molecules sequentially
     """
-    if not _stout_optimized:
-        optimize_stout_model()
-        
-    logger.info(f"Starting CPU-optimized batch STOUT translation for {len(smiles_list)} SMILES")
+    logger.info(f"Starting batch STOUT translation for {len(smiles_list)} SMILES")
     start_time = time.time()
     
     try:
-        torch = lazy_import_torch()
-        with torch.no_grad():
-            # Set optimal threading for batch processing
-            original_threads = torch.get_num_threads()
-            torch.set_num_threads(4)  # More threads for batch processing
-            
+        results = []
+        
+        # Process each SMILES with caching
+        for smiles in smiles_list:
             try:
-                results = []
-                
-                # Process each SMILES with caching
-                for smiles in smiles_list:
-                    try:
-                        # Use cached result if available, otherwise process
-                        result = cached_stout_translate(smiles)
-                        results.append(result if result else "No name found")
-                    except Exception as e:
-                        logger.error(f"STOUT batch failed for {smiles}: {e}")
-                        results.append("No name found")
-                            
-            finally:
-                torch.set_num_threads(original_threads)
-            
-            elapsed_time = time.time() - start_time
-            avg_time = elapsed_time / len(smiles_list)
-            logger.info(f"Batch STOUT completed in {elapsed_time:.2f}s for {len(smiles_list)} SMILES (avg: {avg_time:.2f}s each)")
-            return results
-            
+                # Use cached result if available, otherwise process
+                result = cached_stout_translate(smiles)
+                results.append(result if result else "No name found")
+            except Exception as e:
+                logger.error(f"STOUT batch failed for {smiles}: {e}")
+                results.append("No name found")
+        
+        elapsed_time = time.time() - start_time
+        avg_time = elapsed_time / len(smiles_list)
+        logger.info(f"Batch STOUT completed in {elapsed_time:.2f}s for {len(smiles_list)} SMILES (avg: {avg_time:.2f}s each)")
+        return results
+        
     except Exception as e:
         elapsed_time = time.time() - start_time
         logger.error(f"Batch STOUT failed after {elapsed_time:.2f}s: {e}")
@@ -308,8 +222,85 @@ async def get_molecule_name_async(smiles: str) -> str:
         logger.error(f"All naming methods failed for {smiles}: {e}")
         return "No name found"
 
+async def get_molecule_names_with_credits(smiles_list: List[str], user_id: str) -> tuple:
+    """Process SMILES with credit consumption tracking - optimized for database efficiency
+    Returns: (names, basic_credits_used, premium_credits_used, compute_time)"""
+    logger.info(f"Processing batch of {len(smiles_list)} SMILES with credit tracking")
+    
+    # Pre-fetch user data once to avoid multiple database calls
+    user = await db_service.get_user_by_id(user_id)
+    if not user:
+        return ["User not found"] * len(smiles_list), 0, 0, 0.0
+    
+    # Check PubChem for all SMILES first (uses basic credits)
+    pubchem_tasks = [pubchem_name_from_smiles(smiles) for smiles in smiles_list]
+    pubchem_results = await asyncio.gather(*pubchem_tasks, return_exceptions=True)
+    
+    # Collect SMILES that need STOUT processing
+    stout_needed = []
+    stout_indices = []
+    final_results = [None] * len(smiles_list)
+    basic_credits_used = 0
+    premium_credits_used = 0
+    total_compute_time = 0.0
+    
+    # Process PubChem results and consume basic credits
+    for i, (smiles, pubchem_result) in enumerate(zip(smiles_list, pubchem_results)):
+        logger.info(f"Processing SMILES {smiles}: PubChem result = {pubchem_result} (type: {type(pubchem_result)})")
+        
+        if isinstance(pubchem_result, str) and pubchem_result != "No name found" and pubchem_result is not None:
+            # PubChem success - consume basic credit
+            logger.info(f"PubChem success for {smiles}, attempting to consume basic credit")
+            if await db_service.consume_basic_credits(user_id, 1):
+                final_results[i] = pubchem_result
+                basic_credits_used += 1
+                logger.info(f"Basic credit consumed for {smiles}")
+            else:
+                # Fall back to STOUT if no basic credits
+                logger.info(f"No basic credits available for {smiles}, falling back to STOUT")
+                stout_needed.append(smiles)
+                stout_indices.append(i)
+        else:
+            # PubChem failed - need STOUT
+            logger.info(f"PubChem failed for {smiles}, using STOUT")
+            stout_needed.append(smiles)
+            stout_indices.append(i)
+    
+    # Process remaining SMILES with STOUT (uses premium credits)
+    if stout_needed:
+        logger.info(f"Running batch STOUT for {len(stout_needed)} remaining SMILES")
+        try:
+            start_compute = time.time()
+            loop = asyncio.get_event_loop()
+            stout_results = await loop.run_in_executor(executor, true_batch_stout_translate, stout_needed)
+            compute_time = time.time() - start_compute
+            total_compute_time = compute_time
+            
+            # Consume premium credits and fill in results
+            for idx, result, smiles in zip(stout_indices, stout_results, stout_needed):
+                individual_compute_time = compute_time / len(stout_needed)
+                credits_for_this_molecule = individual_compute_time / 10  # 1 credit = 10 seconds
+                
+                if await db_service.consume_premium_credits(user_id, individual_compute_time):
+                    final_results[idx] = result
+                    premium_credits_used += credits_for_this_molecule
+                else:
+                    final_results[idx] = "Credit limit exceeded"
+                    
+        except Exception as e:
+            logger.error(f"Batch STOUT processing failed: {e}")
+            for idx in stout_indices:
+                final_results[idx] = "Processing failed"
+    
+    # Fill any remaining None values
+    for i in range(len(final_results)):
+        if final_results[i] is None:
+            final_results[i] = "No name found"
+    
+    return final_results, basic_credits_used, premium_credits_used, total_compute_time
+
 async def get_molecule_names_batch_async(smiles_list: List[str]) -> List[str]:
-    """Optimized batch processing for multiple SMILES"""
+    """Legacy batch processing function for backward compatibility"""
     logger.info(f"Processing batch of {len(smiles_list)} SMILES")
     
     # Check PubChem for all SMILES first
@@ -369,36 +360,42 @@ async def ping():
 async def readiness_check():
     """Readiness check for Cloud Run with model loading status"""
     try:
-        # Check if models are loaded
-        models_ready = _stout_optimized
-        
-        # Try to import startup optimizer to check background loading
+        # Check background loading status
         try:
-            from startup_optimizer import optimizer
-            if optimizer and optimizer.is_ready():
-                models_ready = True
+            from background_loader import background_loader
+            loader_status = background_loader.get_status()
+            models_ready = loader_status["loaded"]
         except ImportError:
-            pass
+            # Fallback to direct import check
+            try:
+                from STOUT import translate_forward
+                models_ready = True
+                loader_status = {"status": "loaded", "loaded": True, "loading": False}
+            except ImportError:
+                models_ready = False
+                loader_status = {"status": "not_started", "loaded": False, "loading": False}
         
         if models_ready:
             return {
                 "status": "ready", 
                 "uptime": round(time.time() - _startup_time, 1),
-                "optimized": _stout_optimized,
-                "models_loaded": True
+                "optimized": False, # No optimizations applied
+                "models_loaded": True,
+                "background_loading": loader_status
             }
         else:
             return {
                 "status": "loading", 
                 "uptime": round(time.time() - _startup_time, 1),
-                "optimized": _stout_optimized,
-                "models_loaded": False
+                "optimized": False, # No optimizations applied
+                "models_loaded": False,
+                "background_loading": loader_status
             }
     except Exception as e:
         return {
             "status": "error", 
             "uptime": round(time.time() - _startup_time, 1),
-            "optimized": _stout_optimized,
+            "optimized": False, # No optimizations applied
             "models_loaded": False,
             "error": str(e)
         }
@@ -425,9 +422,9 @@ async def test_stout():
             "smiles": "CCO",
             "result": result,
             "time_seconds": elapsed_time,
-            "optimizations_applied": _stout_optimized,
-            "device": str(_stout_device),
-            "cuda_available": torch.cuda.is_available(),
+            "optimizations_applied": False, # No optimizations applied
+            "device": "N/A",
+            "cuda_available": False,
             "message": f"STOUT working, took {elapsed_time:.2f}s"
         }
     except Exception as e:
@@ -438,8 +435,8 @@ async def test_stout():
             "status": "error", 
             "error": str(e),
             "time_seconds": elapsed_time,
-            "optimizations_applied": _stout_optimized,
-            "device": str(_stout_device),
+            "optimizations_applied": False, # No optimizations applied
+            "device": "N/A",
             "message": f"STOUT failed after {elapsed_time:.2f}s"
         }
 
@@ -471,8 +468,8 @@ async def test_batch():
             "total_time_seconds": elapsed_time,
             "average_time_seconds": avg_time,
             "molecules_processed": len(test_smiles),
-            "optimizations_applied": _stout_optimized,
-            "device": str(_stout_device),
+            "optimizations_applied": False, # No optimizations applied
+            "device": "N/A",
             "message": f"Batch processed {len(test_smiles)} molecules in {elapsed_time:.2f}s (avg: {avg_time:.2f}s each)"
         }
     except Exception as e:
@@ -484,7 +481,7 @@ async def test_batch():
             "error": str(e),
             "total_time_seconds": elapsed_time,
             "test_smiles": test_smiles,
-            "optimizations_applied": _stout_optimized,
+            "optimizations_applied": False, # No optimizations applied
             "message": f"Batch test failed after {elapsed_time:.2f}s"
         }
 
@@ -508,6 +505,23 @@ async def cache_stats():
         "max_cache_size": cache_info.maxsize,
         "hit_rate": cache_info.hits / (cache_info.hits + cache_info.misses) if (cache_info.hits + cache_info.misses) > 0 else 0
     }
+
+@app.get("/background-status")
+async def background_status():
+    """Get background loading status"""
+    try:
+        from background_loader import background_loader
+        status = background_loader.get_status()
+        return {
+            "background_loading": status,
+            "uptime": round(time.time() - _startup_time, 1)
+        }
+    except ImportError:
+        return {
+            "background_loading": {"status": "not_available", "loaded": False, "loading": False},
+            "uptime": round(time.time() - _startup_time, 1),
+            "message": "Background loader not available"
+        }
 
 @app.post("/auth/register", response_model=Token)
 async def register_user(user: UserCreate):
@@ -565,16 +579,35 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
         id=current_user["id"],
         email=current_user["email"],
         subscription_plan=current_user.get("subscription_plan", "free"),
-        api_calls_used=current_user.get("api_calls_used", 0),
-        api_calls_limit=current_user.get("api_calls_limit", 100),
+        basic_credits_used=int(current_user.get("basic_credits_used", 0)),
+        basic_credits_limit=int(current_user.get("basic_credits_limit", 200)),
+        premium_credits_used=float(current_user.get("premium_credits_used", 0.0)),
+        premium_credits_limit=float(current_user.get("premium_credits_limit", 35.0)),
         created_at=current_user["created_at"]
     )
 
 @app.get("/auth/usage")
 async def get_user_usage(current_user: dict = Depends(get_current_user)):
-    """Get user's API usage statistics"""
-    usage = await db_service.get_user_usage(current_user["id"])
+    """Get user's credit usage statistics"""
+    usage = await db_service.get_user_credit_usage(current_user["id"])
     return usage
+
+@app.get("/auth/credits")
+async def check_credit_availability(current_user: dict = Depends(get_current_user)):
+    """Check credit availability for both basic and premium"""
+    usage = await db_service.get_user_credit_usage(current_user["id"])
+    
+    basic_remaining = usage.get("basic_credits_limit", 0) - usage.get("basic_credits_used", 0)
+    premium_remaining = usage.get("premium_credits_limit", 0) - usage.get("premium_credits_used", 0)
+    
+    return {
+        "basic_credits_remaining": max(0, basic_remaining),
+        "premium_credits_remaining": max(0, premium_remaining),
+        "can_use_basic": basic_remaining > 0,
+        "can_use_premium": premium_remaining > 0,
+        "subscription_plan": usage.get("subscription_plan", "free"),
+        "monthly_reset_date": usage.get("monthly_reset_date")
+    }
 
 @app.post("/auth/logout")
 async def logout_user(current_user: dict = Depends(get_current_user)):
@@ -584,81 +617,101 @@ async def logout_user(current_user: dict = Depends(get_current_user)):
     logger.info(f"User logged out: {current_user['email']}")
     return {"message": "Logged out successfully"}
 
+class SubscriptionUpdate(BaseModel):
+    plan: str
+
+@app.post("/auth/subscription")
+async def update_subscription(
+    subscription: SubscriptionUpdate,
+    current_user: dict = Depends(get_current_user)
+):
+    """Update user's subscription plan"""
+    try:
+        success = await db_service.update_user_subscription(current_user["id"], subscription.plan)
+        if success:
+            return {"message": f"Subscription updated to {subscription.plan}", "plan": subscription.plan}
+        else:
+            raise HTTPException(status_code=400, detail="Failed to update subscription")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Subscription update error: {e}")
+        raise HTTPException(status_code=500, detail="Subscription update failed")
+
 @app.post("/api/name", response_model=NameResponse)
-async def get_molecule_name(req: NameRequest, user: dict = Depends(check_api_limits)):
-    """Main naming endpoint with authentication and usage tracking"""
+async def get_molecule_name(req: NameRequest, user: dict = Depends(check_credit_limits)):
+    """Main naming endpoint with authentication and credit tracking"""
     smiles_list = req.smiles if isinstance(req.smiles, list) else [req.smiles]
     logger.info(f"Processing {len(smiles_list)} SMILES strings for user {user['email']}")
     
     start_time = time.time()
     
     try:
-        # Process all SMILES concurrently
-        names = await get_molecule_names_batch_async(smiles_list)
+        # Process all SMILES with credit tracking
+        names, basic_used, premium_used, compute_time = await get_molecule_names_with_credits(smiles_list, user["id"])
         
-        # Track API usage
         response_time = time.time() - start_time
         
-        # Increment API call count
-        await db_service.increment_api_calls(user["id"])
+        # Log credit usage for analytics
+        if basic_used > 0:
+            await db_service.log_credit_usage(user["id"], "basic", float(basic_used), 
+                                            ",".join(smiles_list), ",".join(names))
+        if premium_used > 0:
+            await db_service.log_credit_usage(user["id"], "premium", premium_used, 
+                                            ",".join(smiles_list), ",".join(names), compute_time)
         
-        # Log API call for analytics
-        for smiles, name in zip(smiles_list, names):
-            await db_service.log_api_call(user["id"], smiles, name, response_time)
-        
-        logger.info(f"API call completed for user {user['email']}: {len(smiles_list)} molecules in {response_time:.2f}s")
+        logger.info(f"Naming completed for user {user['email']}: {len(smiles_list)} molecules, "
+                   f"{basic_used} basic credits, {premium_used} premium credits in {response_time:.2f}s")
         
         return {"names": names}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Unexpected error in get_molecule_name: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.on_event("startup")
 async def startup_event():
-    """Startup event handler with optimization initialization"""
+    """Startup event handler - fast startup with background model loading"""
     logger.info("Chemical Naming API starting up...")
     
-    # Start background model loading for faster perceived startup
+    # Start background STOUT loading (non-blocking)
     try:
-        from startup_optimizer import start_optimization
-        optimizer = start_optimization()
-        logger.info("Background model pre-loading started")
+        from background_loader import start_background_loading
+        background_loader = start_background_loading()
+        logger.info("Background STOUT loading started")
     except ImportError:
-        logger.info("Startup optimizer not available, using standard loading")
-        optimizer = None
-    
-    # Initialize optimizations (this will be faster now with lazy loading)
-    optimize_stout_model()
+        logger.info("Background loader not available, using on-demand loading")
+        background_loader = None
     
     # Start database cleanup task
     asyncio.create_task(cleanup_database())
     logger.info("Database cleanup task started")
     
-    # Log optimization status
-    torch = lazy_import_torch()
-    logger.info(f"PyTorch version: {torch.__version__}")
-    logger.info(f"CUDA available: {torch.cuda.is_available()}")
-    if torch.cuda.is_available():
-        logger.info(f"CUDA device: {torch.cuda.get_device_name(0)}")
-        logger.info(f"CUDA memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
-    
+    # Log startup status
     logger.info(f"Thread pool workers: {executor._max_workers}")
     logger.info(f"LRU cache size: 1024")
-    logger.info(f"Optimizations applied: {_stout_optimized}")
     logger.info(f"Authentication: enabled with Firestore")
     logger.info(f"Startup time: {time.time() - _startup_time:.2f}s")
-    
-    if optimizer:
-        logger.info("Background model loading in progress...")
+    logger.info("Ready to serve requests - STOUT loading in background")
 
 async def cleanup_database():
-    """Periodically clean up expired sessions and old data"""
+    """Periodically clean up expired sessions and old data for cost optimization"""
     while True:
         try:
             # Clean up expired sessions
             expired_count = await db_service.cleanup_expired_sessions()
             
-            # Add other cleanup tasks here as needed
+            # Clean up old credit usage logs (run less frequently to save costs)
+            import random
+            if random.random() < 0.2:  # 20% chance each cycle (roughly once per hour)
+                try:
+                    from cleanup_old_data import cleanup_old_credit_usage
+                    old_logs_count = await cleanup_old_credit_usage()
+                    if old_logs_count > 0:
+                        logger.info(f"Database cleanup: removed {old_logs_count} old credit usage logs")
+                except ImportError:
+                    logger.warning("Cleanup script not available")
             
             if expired_count > 0:
                 logger.info(f"Database cleanup: removed {expired_count} expired sessions")

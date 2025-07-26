@@ -10,9 +10,6 @@ httpx==0.25.2
 stout-pypi==2.0.5
 pubchempy==1.0.4
 
-# PyTorch for optimizations (CPU version)
-torch>=2.0.0
-
 # Performance optimizations for uvicorn
 uvloop==0.19.0
 httptools==0.6.1
@@ -24,10 +21,15 @@ python-dotenv==1.0.0
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 python-multipart==0.0.6
+email-validator==2.1.0
 
 # Firestore database
+firebase-admin==6.4.0
 google-cloud-firestore==2.13.1
 google-auth==2.23.4
 
 # Optional: Memory profiling (useful for optimization)
-psutil==5.9.6 
+psutil==5.9.6
+
+# Additional dependencies that might be needed
+requests>=2.31.0 
