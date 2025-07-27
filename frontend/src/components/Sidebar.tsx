@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Copy, Download, FileText, AlertTriangle, Lightbulb, Upload, LogOut, User, RefreshCw } from 'lucide-react';
 import type { Molecule, ValidationWarning } from '../types/chemistry';
 import { importFromSmiles } from '../utils/smilesToGraph';
