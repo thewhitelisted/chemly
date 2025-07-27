@@ -5,6 +5,8 @@ pydantic==2.5.0
 
 # HTTP client
 httpx==0.25.2
+aiohttp==3.9.1
+aiofiles==23.2.1
 
 # Chemistry libraries
 stout-pypi==2.0.5

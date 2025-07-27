@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { Copy, Download, FileText, AlertTriangle, Lightbulb, Upload, LogOut, User } from 'lucide-react';
+import { Copy, Download, FileText, AlertTriangle, Lightbulb, Upload, LogOut, User, RefreshCw } from 'lucide-react';
 import type { Molecule, ValidationWarning } from '../types/chemistry';
 import { importFromSmiles } from '../utils/smilesToGraph';
 import { validateStructure } from '../utils/validateStructure';
 import { namingCache } from '../utils/namingCache';
-import { createNamingDebouncer } from '../utils/smartDebouncer';
 import { useSmilesOptimization } from '../utils/useSmilesOptimization';
 import { useAuth } from '../contexts/AuthContext';
 import { apiClient } from '../config/api';
@@ -27,6 +26,7 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
   });
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [moleculeName, setMoleculeName] = useState<string | string[]>('');
+  const [isNamingLoading, setIsNamingLoading] = useState(false);
 
   // Set auth token for API client
   useEffect(() => {
@@ -39,42 +39,16 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
   // Use optimized SMILES generation
   const { smiles: currentSmiles, isLoading: isExporting } = useSmilesOptimization(molecule);
 
-  // Create debouncer for naming requests (simplified for pre-cached models)
-  const debouncerRef = useRef(createNamingDebouncer(
-    async (smiles: string) => {
-      if (!smiles) {
-        setMoleculeName('');
-        return;
-      }
-
-      try {
-        // Use the caching system
-        const result = await namingCache.requestName(smiles);
-        setMoleculeName(result);
-      } catch (error) {
-        if (error instanceof Error && error.message === 'Request cancelled') {
-          // Request was cancelled, don't update state
-          return;
-        }
-        console.error('Naming request failed:', error);
-        setMoleculeName('No name found');
-      }
-    }
-  ));
-
   // Update validation when molecule changes
   useEffect(() => {
     const newValidation = validateStructure(molecule);
     setValidation(newValidation);
   }, [molecule]);
 
-  // Smart debounced naming when SMILES changes
+  // Clear molecule name when SMILES changes (but don't auto-generate)
   useEffect(() => {
-    const debouncer = debouncerRef.current;
-    
     if (!currentSmiles) {
       setMoleculeName('');
-      debouncer.cancel(); // Cancel any pending requests
       return;
     }
 
@@ -82,26 +56,37 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
     const cached = namingCache.getCached(currentSmiles);
     if (cached !== null) {
       setMoleculeName(cached);
-      debouncer.cancel(); // No need to make a request
-      return;
+    } else {
+      // Clear name if not cached
+      setMoleculeName('');
     }
-
-    // Start the smart debounced request
-    debouncer.execute(currentSmiles);
-
-    // Cleanup function
-    return () => {
-      debouncer.cancel();
-    };
   }, [currentSmiles]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      debouncerRef.current.cancel();
       namingCache.cancelAllRequests();
     };
   }, []);
+
+  const handleUpdateName = async () => {
+    if (!currentSmiles || isNamingLoading) return;
+    
+    setIsNamingLoading(true);
+    try {
+      const result = await namingCache.requestName(currentSmiles);
+      setMoleculeName(result);
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Request cancelled') {
+        // Request was cancelled, don't update state
+        return;
+      }
+      console.error('Naming request failed:', error);
+      setMoleculeName('No name found');
+    } finally {
+      setIsNamingLoading(false);
+    }
+  };
 
   const handleCopySmiles = async () => {
     try {
@@ -242,14 +227,19 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
         </div>
       </div>
 
-      {/* Molecule Name (Optimized) */}
+      {/* Molecule Name (Manual Update) */}
       <div className="space-y-2">
         <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
           <FileText className="w-4 h-4" />
           <span className="dark:text-gray-100">Molecule Name{Array.isArray(moleculeName) && moleculeName.length > 1 ? 's' : ''}</span>
         </h3>
         <div className="p-3 border rounded-md transition-colors bg-gray-50 dark:bg-zinc-800 border-gray-200 dark:border-zinc-700">
-          {Array.isArray(moleculeName) ? (
+          {isNamingLoading ? (
+            <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-100">
+              <RefreshCw className="w-4 h-4 animate-spin" />
+              <span>Loading name...</span>
+            </div>
+          ) : Array.isArray(moleculeName) ? (
             <ul className="list-disc pl-5">
               {moleculeName.map((name, idx) => (
                 <li key={idx} className="text-sm text-gray-700 dark:text-gray-100 font-mono break-all bg-transparent">{name}</li>
@@ -261,6 +251,23 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
             </span>
           )}
         </div>
+        <button
+          onClick={handleUpdateName}
+          disabled={!currentSmiles || isNamingLoading}
+          className="w-full px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed dark:bg-blue-700 dark:hover:bg-blue-800 disabled:dark:bg-zinc-700 disabled:dark:text-gray-400 flex items-center justify-center gap-2"
+        >
+          {isNamingLoading ? (
+            <>
+              <RefreshCw className="w-4 h-4 animate-spin" />
+              Loading...
+            </>
+          ) : (
+            <>
+              <RefreshCw className="w-4 h-4" />
+              Update Name
+            </>
+          )}
+        </button>
       </div>
 
       {/* Structure Validation */}

@@ -151,9 +151,22 @@ def cached_stout_translate(smiles: str) -> str:
         return "No name found"
 
 async def pubchem_name_from_smiles(smiles: str) -> Optional[str]:
-    """Async wrapper for PubChem lookup with timeout"""
+    """Async wrapper for PubChem lookup with local cache fallback"""
     try:
-        # Run in executor to avoid blocking
+        # First try local cache
+        try:
+            from pubchem_cache_service import get_pubchem_cache
+            cache = get_pubchem_cache()
+            cached_name = cache.lookup_iupac_name(smiles)
+            if cached_name:
+                logger.info(f"PubChem cache hit for {smiles}: {cached_name}")
+                return cached_name
+        except ImportError:
+            logger.debug("PubChem cache service not available")
+        except Exception as e:
+            logger.debug(f"PubChem cache lookup failed: {e}")
+        
+        # Fallback to online PubChem API
         loop = asyncio.get_event_loop()
         compounds = await asyncio.wait_for(
             loop.run_in_executor(
@@ -164,7 +177,7 @@ async def pubchem_name_from_smiles(smiles: str) -> Optional[str]:
         )
         
         if compounds and hasattr(compounds[0], 'iupac_name') and compounds[0].iupac_name:
-            logger.info(f"PubChem IUPAC for {smiles}: {compounds[0].iupac_name}")
+            logger.info(f"PubChem API IUPAC for {smiles}: {compounds[0].iupac_name}")
             return compounds[0].iupac_name
         else:
             logger.info(f"No PubChem IUPAC name found for {smiles}")
@@ -521,6 +534,23 @@ async def background_status():
             "background_loading": {"status": "not_available", "loaded": False, "loading": False},
             "uptime": round(time.time() - _startup_time, 1),
             "message": "Background loader not available"
+        }
+
+@app.get("/pubchem-cache-status")
+async def pubchem_cache_status():
+    """Get PubChem cache status"""
+    try:
+        from pubchem_cache_service import get_pubchem_cache
+        cache = get_pubchem_cache()
+        stats = cache.get_cache_stats()
+        return {
+            "pubchem_cache": stats,
+            "uptime": round(time.time() - _startup_time, 1)
+        }
+    except ImportError:
+        return {
+            "pubchem_cache": {"available": False, "error": "Cache service not available"},
+            "uptime": round(time.time() - _startup_time, 1)
         }
 
 @app.post("/auth/register", response_model=Token)
