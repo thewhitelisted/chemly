@@ -375,5 +375,24 @@ class FirestoreService:
             logger.error(f"Error updating user subscription: {e}")
             return False
 
+    async def reset_user_credits(self, user_id: str) -> bool:
+        """Reset user's credit usage to 0"""
+        try:
+            user_ref = self.users_collection.document(user_id)
+            user_ref.update({
+                'basic_credits_used': 0,
+                'premium_credits_used': 0.0,
+                'last_credit_usage': datetime.utcnow()
+            })
+            
+            # Invalidate cache since user data changed
+            self._invalidate_user_cache(user_id)
+            
+            logger.info(f"User {user_id} credits reset to 0")
+            return True
+        except Exception as e:
+            logger.error(f"Error resetting user credits: {e}")
+            return False
+
 # Global database service instance
 db_service = FirestoreService() 

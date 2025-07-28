@@ -650,6 +650,11 @@ async def logout_user(current_user: dict = Depends(get_current_user)):
 class SubscriptionUpdate(BaseModel):
     plan: str
 
+class AdminSubscriptionUpdate(BaseModel):
+    user_email: str
+    new_plan: str
+    reset_credits: bool = False  # Optional: reset credit usage to 0
+
 @app.post("/auth/subscription")
 async def update_subscription(
     subscription: SubscriptionUpdate,
@@ -667,6 +672,42 @@ async def update_subscription(
     except Exception as e:
         logger.error(f"Subscription update error: {e}")
         raise HTTPException(status_code=500, detail="Subscription update failed")
+
+@app.post("/admin/update-subscription")
+async def admin_update_subscription(
+    update: AdminSubscriptionUpdate,
+    current_user: dict = Depends(get_current_user)
+):
+    """Admin endpoint to update any user's subscription plan"""
+    try:
+        # Find user by email
+        target_user = await db_service.get_user_by_email(update.user_email)
+        if not target_user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Update subscription
+        success = await db_service.update_user_subscription(target_user["id"], update.new_plan)
+        if not success:
+            raise HTTPException(status_code=400, detail="Failed to update subscription")
+        
+        # Optionally reset credits
+        if update.reset_credits:
+            await db_service.reset_user_credits(target_user["id"])
+        
+        logger.info(f"Admin {current_user['email']} updated user {update.user_email} to {update.new_plan} plan")
+        
+        return {
+            "message": f"User {update.user_email} subscription updated to {update.new_plan}",
+            "user_email": update.user_email,
+            "new_plan": update.new_plan,
+            "credits_reset": update.reset_credits
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Admin subscription update error: {e}")
+        raise HTTPException(status_code=500, detail="Admin subscription update failed")
 
 @app.post("/api/name", response_model=NameResponse)
 async def get_molecule_name(req: NameRequest, user: dict = Depends(check_credit_limits)):

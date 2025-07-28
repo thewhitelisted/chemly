@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Copy, Download, FileText, AlertTriangle, Lightbulb, Upload, LogOut, User, RefreshCw } from 'lucide-react';
+import { Copy, Download, FileText, AlertTriangle, Lightbulb, Upload, LogOut, User, RefreshCw, Crown } from 'lucide-react';
 import type { Molecule, ValidationWarning } from '../types/chemistry';
 import { importFromSmiles } from '../utils/smilesToGraph';
 import { validateStructure } from '../utils/validateStructure';
@@ -7,6 +7,7 @@ import { namingCache } from '../utils/namingCache';
 import { useSmilesOptimization } from '../utils/useSmilesOptimization';
 import { useAuth } from '../contexts/AuthContext';
 import { apiClient } from '../config/api';
+import { AdminPanel } from './AdminPanel';
 
 
 interface SidebarProps {
@@ -27,6 +28,7 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [moleculeName, setMoleculeName] = useState<string | string[]>('');
   const [isNamingLoading, setIsNamingLoading] = useState(false);
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
 
   // Set auth token for API client
   useEffect(() => {
@@ -361,7 +363,17 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
                 <span className="font-mono">{user?.premium_credits_used || 0} / {user?.premium_credits_limit || 35}</span>
               </div>
             </div>
-            <div className="pt-2 border-t border-gray-200 dark:border-zinc-600">
+            <div className="pt-2 border-t border-gray-200 dark:border-zinc-600 space-y-2">
+              {/* Admin Panel Button - Only show for specific admin emails */}
+              {(user?.email === 'jleechris06@gmail.com') && (
+                <button
+                  onClick={() => setIsAdminPanelOpen(true)}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-[#007d40] hover:text-[#006030] hover:bg-[#007d40]/10 dark:text-[#007d40] dark:hover:text-[#006030] dark:hover:bg-[#007d40]/20 rounded-md transition-colors duration-200"
+                >
+                  <Crown className="w-4 h-4" />
+                  Admin Panel
+                </button>
+              )}
               <button
                 onClick={logout}
                 className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20 rounded-md transition-colors duration-200"
@@ -384,6 +396,12 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
           {notification.message}
         </div>
       )}
+
+      {/* Admin Panel */}
+      <AdminPanel 
+        isOpen={isAdminPanelOpen} 
+        onClose={() => setIsAdminPanelOpen(false)} 
+      />
     </div>
   );
 }
