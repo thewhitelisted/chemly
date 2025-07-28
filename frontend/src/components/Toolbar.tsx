@@ -1,5 +1,7 @@
-import { MousePointer, Eraser, Move, Sparkles, Sun, Moon } from 'lucide-react';
+import { MousePointer, Eraser, Move, Sparkles, Settings } from 'lucide-react';
+import { useState } from 'react';
 import type { ElementSymbol } from '../types/chemistry';
+import { SettingsModal } from './SettingsModal';
 
 interface ToolbarProps {
   selectedElement: ElementSymbol;
@@ -32,6 +34,8 @@ export function Toolbar({
   darkMode,
   onToggleDarkMode,
 }: ToolbarProps) {
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
   return (
     <div className="w-16 bg-white dark:bg-zinc-900 border-r border-gray-200 dark:border-zinc-800 flex flex-col items-center py-4 shadow-sm relative transition-colors">
       {/* Tool Selection */}
@@ -107,13 +111,21 @@ export function Toolbar({
           <Sparkles size={22} />
         </button>
         <button
-          onClick={onToggleDarkMode}
+          onClick={() => setIsSettingsOpen(true)}
           className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors border border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-zinc-700`}
-          title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          title="Settings"
         >
-          {darkMode ? <Sun size={22} /> : <Moon size={22} />}
+          <Settings size={22} />
         </button>
       </div>
+
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        darkMode={darkMode}
+        onToggleDarkMode={onToggleDarkMode}
+      />
     </div>
   );
 }
