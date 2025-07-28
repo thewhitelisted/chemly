@@ -1,6 +1,12 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
+from enum import Enum
+
+class UserRole(str, Enum):
+    USER = "user"
+    ADMIN = "admin"
+    MODERATOR = "moderator"
 
 class UserCreate(BaseModel):
     email: EmailStr
@@ -13,6 +19,7 @@ class UserLogin(BaseModel):
 class UserResponse(BaseModel):
     id: str
     email: str
+    role: UserRole
     subscription_plan: str
     basic_credits_used: int
     basic_credits_limit: int
@@ -27,6 +34,7 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     user_id: Optional[str] = None
+    role: Optional[UserRole] = None
 
 class SubscriptionPlan(BaseModel):
     plan: str

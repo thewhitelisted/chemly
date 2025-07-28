@@ -6,13 +6,14 @@ import secrets
 import logging
 from database import db_service
 from auth_models import TokenData
+from config import security_config
 
 logger = logging.getLogger(__name__)
 
-# Security settings
-SECRET_KEY = "your-secret-key-change-this-in-production"  # Should be in environment variables
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+# Security settings - now from environment variables
+SECRET_KEY = security_config.SECRET_KEY
+ALGORITHM = security_config.JWT_ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES = security_config.JWT_EXPIRE_MINUTES
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -32,7 +33,7 @@ class AuthService:
         return pwd_context.hash(password)
     
     def create_access_token(self, data: dict, expires_delta: Optional[timedelta] = None) -> str:
-        """Create a JWT access token"""
+        """Create a JWT access token with role information"""
         to_encode = data.copy()
         if expires_delta:
             expire = datetime.utcnow() + expires_delta
@@ -48,9 +49,10 @@ class AuthService:
         try:
             payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
             user_id: str = payload.get("sub")
+            role: str = payload.get("role", "user")
             if user_id is None:
                 return None
-            return TokenData(user_id=user_id)
+            return TokenData(user_id=user_id, role=UserRole(role))
         except JWTError:
             return None
     
@@ -69,16 +71,16 @@ class AuthService:
             logger.error(f"Error authenticating user: {e}")
             return None
     
-    async def create_user_session(self, user_id: str) -> str:
-        """Create a new session for a user"""
+    async def create_user_session(self, user_id: str, role: str = "user") -> str:
+        """Create a new session for a user with role information"""
         try:
             # Generate a unique session token
             session_token = secrets.token_urlsafe(32)
             
-            # Create JWT token
+            # Create JWT token with role
             access_token_expires = timedelta(minutes=self.access_token_expire_minutes)
             access_token = self.create_access_token(
-                data={"sub": user_id}, expires_delta=access_token_expires
+                data={"sub": user_id, "role": role}, expires_delta=access_token_expires
             )
             
             # Store session in database

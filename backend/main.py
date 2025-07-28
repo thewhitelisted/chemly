@@ -16,6 +16,10 @@ from datetime import datetime, timedelta
 from auth_models import UserCreate, UserLogin, UserResponse, Token
 from auth_service import auth_service
 from database import db_service
+from rate_limiter import rate_limiter
+from config import security_config
+from validation import SMILESValidator, EmailValidator, PasswordValidator, InputSanitizer
+from security_middleware import SecurityHeadersMiddleware, RequestLoggingMiddleware
 
 # Environment optimizations to reduce import warnings and improve performance
 os.environ['TOKENIZERS_PARALLELISM'] = 'false'  # Avoid tokenizer warnings
@@ -64,15 +68,14 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Chemical Naming API", version="1.0.0")
 
+# Add security middleware
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestLoggingMiddleware)
+
 # Add CORS middleware - restricted to orgolab.ca domain
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://orgolab.ca",
-        "https://www.orgolab.ca", 
-        "http://orgolab.ca",
-        "http://www.orgolab.ca"
-    ],
+    allow_origins=security_config.CORS_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
@@ -93,6 +96,16 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user
+
+# Dependency to check admin privileges
+async def get_admin_user(current_user: dict = Depends(get_current_user)) -> dict:
+    """Get current user and verify admin privileges"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin privileges required"
+        )
+    return current_user
 
 # Dependency to check user credit limits
 async def check_credit_limits(user: dict = Depends(get_current_user)) -> dict:
@@ -554,17 +567,35 @@ async def pubchem_cache_status():
         }
 
 @app.post("/auth/register", response_model=Token)
-async def register_user(user: UserCreate):
+async def register_user(user: UserCreate, request: Request):
     """Register a new user"""
+    # Rate limiting
+    client_ip = request.client.host
+    if not rate_limiter.is_auth_allowed(client_ip):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many registration attempts. Please try again later."
+        )
+    
+    # Input validation
+    email = EmailValidator.sanitize_email(user.email)
+    is_valid_email, email_error = EmailValidator.validate_email(email)
+    if not is_valid_email:
+        raise HTTPException(status_code=400, detail=email_error)
+    
+    is_valid_password, password_error = PasswordValidator.validate_password(user.password)
+    if not is_valid_password:
+        raise HTTPException(status_code=400, detail=password_error)
+    
     try:
         # Hash the password
         hashed_password = auth_service.get_password_hash(user.password)
         
         # Create user in database
-        user_id = await db_service.create_user(user.email, hashed_password)
+        user_id = await db_service.create_user(email, hashed_password)
         
-        # Create session token
-        access_token = await auth_service.create_user_session(user_id)
+        # Create session token with default role
+        access_token = await auth_service.create_user_session(user_id, "user")
         
         return Token(
             access_token=access_token,
@@ -578,8 +609,16 @@ async def register_user(user: UserCreate):
         raise HTTPException(status_code=500, detail="Registration failed")
 
 @app.post("/auth/login", response_model=Token)
-async def login_user(user: UserLogin):
+async def login_user(user: UserLogin, request: Request):
     """Login user and return access token"""
+    # Rate limiting
+    client_ip = request.client.host
+    if not rate_limiter.is_auth_allowed(client_ip):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many login attempts. Please try again later."
+        )
+    
     try:
         # Authenticate user
         authenticated_user = await auth_service.authenticate_user(user.email, user.password)
@@ -590,8 +629,9 @@ async def login_user(user: UserLogin):
                 headers={"WWW-Authenticate": "Bearer"},
             )
         
-        # Create session token
-        access_token = await auth_service.create_user_session(authenticated_user["id"])
+        # Create session token with user's role
+        user_role = authenticated_user.get("role", "user")
+        access_token = await auth_service.create_user_session(authenticated_user["id"], user_role)
         
         return Token(
             access_token=access_token,
@@ -608,6 +648,7 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
     return UserResponse(
         id=current_user["id"],
         email=current_user["email"],
+        role=current_user.get("role", "user"),
         subscription_plan=current_user.get("subscription_plan", "free"),
         basic_credits_used=int(current_user.get("basic_credits_used", 0)),
         basic_credits_limit=int(current_user.get("basic_credits_limit", 200)),
@@ -676,7 +717,7 @@ async def update_subscription(
 @app.post("/admin/update-subscription")
 async def admin_update_subscription(
     update: AdminSubscriptionUpdate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_admin_user)
 ):
     """Admin endpoint to update any user's subscription plan"""
     try:
@@ -710,28 +751,45 @@ async def admin_update_subscription(
         raise HTTPException(status_code=500, detail="Admin subscription update failed")
 
 @app.post("/api/name", response_model=NameResponse)
-async def get_molecule_name(req: NameRequest, user: dict = Depends(check_credit_limits)):
+async def get_molecule_name(req: NameRequest, request: Request, user: dict = Depends(check_credit_limits)):
     """Main naming endpoint with authentication and credit tracking"""
+    # Rate limiting
+    client_ip = request.client.host
+    if not rate_limiter.is_api_allowed(client_ip):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many API requests. Please try again later."
+        )
+    
     smiles_list = req.smiles if isinstance(req.smiles, list) else [req.smiles]
-    logger.info(f"Processing {len(smiles_list)} SMILES strings for user {user['email']}")
+    
+    # Input validation for SMILES
+    validated_smiles = []
+    for smiles in smiles_list:
+        is_valid, error_msg = SMILESValidator.validate_smiles(smiles)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=f"Invalid SMILES: {error_msg}")
+        validated_smiles.append(SMILESValidator.sanitize_smiles(smiles))
+    
+    logger.info(f"Processing {len(validated_smiles)} SMILES strings for user {user['email']}")
     
     start_time = time.time()
     
     try:
         # Process all SMILES with credit tracking
-        names, basic_used, premium_used, compute_time = await get_molecule_names_with_credits(smiles_list, user["id"])
+        names, basic_used, premium_used, compute_time = await get_molecule_names_with_credits(validated_smiles, user["id"])
         
         response_time = time.time() - start_time
         
         # Log credit usage for analytics
         if basic_used > 0:
             await db_service.log_credit_usage(user["id"], "basic", float(basic_used), 
-                                            ",".join(smiles_list), ",".join(names))
+                                            ",".join(validated_smiles), ",".join(names))
         if premium_used > 0:
             await db_service.log_credit_usage(user["id"], "premium", premium_used, 
-                                            ",".join(smiles_list), ",".join(names), compute_time)
+                                            ",".join(validated_smiles), ",".join(names), compute_time)
         
-        logger.info(f"Naming completed for user {user['email']}: {len(smiles_list)} molecules, "
+        logger.info(f"Naming completed for user {user['email']}: {len(validated_smiles)} molecules, "
                    f"{basic_used} basic credits, {premium_used} premium credits in {response_time:.2f}s")
         
         return {"names": names}

@@ -364,8 +364,8 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
               </div>
             </div>
             <div className="pt-2 border-t border-gray-200 dark:border-zinc-600 space-y-2">
-              {/* Admin Panel Button - Only show for specific admin emails */}
-              {(user?.email === 'jleechris06@gmail.com') && (
+              {/* Admin Panel Button - Only show for admin users */}
+              {(user?.role === 'admin') && (
                 <button
                   onClick={() => setIsAdminPanelOpen(true)}
                   className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-[#007d40] hover:text-[#006030] hover:bg-[#007d40]/10 dark:text-[#007d40] dark:hover:text-[#006030] dark:hover:bg-[#007d40]/20 rounded-md transition-colors duration-200"

@@ -81,6 +81,7 @@ class FirestoreService:
             user_data = {
                 'email': email,
                 'password_hash': password_hash,
+                'role': 'user',  # Default role
                 'created_at': datetime.utcnow(),
                 'subscription_plan': 'free',
                 'basic_credits_used': 0,
