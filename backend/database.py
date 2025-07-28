@@ -66,7 +66,7 @@ class FirestoreService:
         if cache_key in self._user_cache:
             del self._user_cache[cache_key]
     
-    async def create_user(self, email: str, password_hash: str) -> str:
+    async def create_user(self, email: str, password_hash: str, role: str = "user") -> str:
         """Create a new user in Firestore"""
         try:
             # Check if user already exists
@@ -81,7 +81,7 @@ class FirestoreService:
             user_data = {
                 'email': email,
                 'password_hash': password_hash,
-                'role': 'user',  # Default role
+                'role': role,  # Use provided role or default to 'user'
                 'created_at': datetime.utcnow(),
                 'subscription_plan': 'free',
                 'basic_credits_used': 0,
@@ -93,7 +93,7 @@ class FirestoreService:
             }
             
             doc_ref = self.users_collection.add(user_data)
-            logger.info(f"User created: {email}")
+            logger.info(f"User created: {email} with role: {role}")
             return doc_ref[1].id
             
         except Exception as e:
@@ -393,6 +393,23 @@ class FirestoreService:
             return True
         except Exception as e:
             logger.error(f"Error resetting user credits: {e}")
+            return False
+    
+    async def update_user_role(self, user_id: str, new_role: str) -> bool:
+        """Update user's role"""
+        try:
+            user_ref = self.users_collection.document(user_id)
+            user_ref.update({
+                'role': new_role
+            })
+            
+            # Invalidate cache since user data changed
+            self._invalidate_user_cache(user_id)
+            
+            logger.info(f"User {user_id} role updated to {new_role}")
+            return True
+        except Exception as e:
+            logger.error(f"Error updating user role: {e}")
             return False
 
 # Global database service instance

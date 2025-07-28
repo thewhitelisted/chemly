@@ -1,6 +1,6 @@
 import re
 import logging
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Any
 from pydantic import BaseModel, validator
 
 logger = logging.getLogger(__name__)
@@ -137,7 +137,7 @@ class InputSanitizer:
         return sanitized.strip()
     
     @staticmethod
-    def sanitize_integer(value: any, min_val: int = 0, max_val: int = 1000000) -> Optional[int]:
+    def sanitize_integer(value: Any, min_val: int = 0, max_val: int = 1000000) -> Optional[int]:
         """Sanitize and validate integer input"""
         try:
             int_val = int(value)

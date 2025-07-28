@@ -645,10 +645,20 @@ async def login_user(user: UserLogin, request: Request):
 @app.get("/auth/me", response_model=UserResponse)
 async def get_current_user_info(current_user: dict = Depends(get_current_user)):
     """Get current user information"""
+    from auth_models import UserRole
+    
+    # Convert string role to UserRole enum
+    role_str = current_user.get("role", "user")
+    try:
+        role = UserRole(role_str)
+    except ValueError:
+        # If role is invalid, default to user
+        role = UserRole.USER
+    
     return UserResponse(
         id=current_user["id"],
         email=current_user["email"],
-        role=current_user.get("role", "user"),
+        role=role,
         subscription_plan=current_user.get("subscription_plan", "free"),
         basic_credits_used=int(current_user.get("basic_credits_used", 0)),
         basic_credits_limit=int(current_user.get("basic_credits_limit", 200)),
@@ -695,6 +705,10 @@ class AdminSubscriptionUpdate(BaseModel):
     user_email: str
     new_plan: str
     reset_credits: bool = False  # Optional: reset credit usage to 0
+
+class AdminRoleUpdate(BaseModel):
+    user_email: str
+    new_role: str
 
 @app.post("/auth/subscription")
 async def update_subscription(
@@ -749,6 +763,42 @@ async def admin_update_subscription(
     except Exception as e:
         logger.error(f"Admin subscription update error: {e}")
         raise HTTPException(status_code=500, detail="Admin subscription update failed")
+
+@app.post("/admin/update-role")
+async def admin_update_role(
+    update: AdminRoleUpdate,
+    current_user: dict = Depends(get_admin_user)
+):
+    """Admin endpoint to update any user's role"""
+    try:
+        # Find user by email
+        target_user = await db_service.get_user_by_email(update.user_email)
+        if not target_user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Validate role
+        valid_roles = ["user", "admin", "moderator"]
+        if update.new_role not in valid_roles:
+            raise HTTPException(status_code=400, detail=f"Invalid role. Must be one of: {valid_roles}")
+        
+        # Update role
+        success = await db_service.update_user_role(target_user["id"], update.new_role)
+        if not success:
+            raise HTTPException(status_code=400, detail="Failed to update role")
+        
+        logger.info(f"Admin {current_user['email']} updated user {update.user_email} role to {update.new_role}")
+        
+        return {
+            "message": f"User {update.user_email} role updated to {update.new_role}",
+            "user_email": update.user_email,
+            "new_role": update.new_role
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Admin role update error: {e}")
+        raise HTTPException(status_code=500, detail="Admin role update failed")
 
 @app.post("/api/name", response_model=NameResponse)
 async def get_molecule_name(req: NameRequest, request: Request, user: dict = Depends(check_credit_limits)):

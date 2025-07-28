@@ -1,6 +1,6 @@
 import time
 import logging
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List
 from collections import defaultdict
 from config import security_config
 

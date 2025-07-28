@@ -1,11 +1,11 @@
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Dict, Any
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 import secrets
 import logging
 from database import db_service
-from auth_models import TokenData
+from auth_models import TokenData, UserRole
 from config import security_config
 
 logger = logging.getLogger(__name__)

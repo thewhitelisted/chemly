@@ -2,6 +2,7 @@ from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import StreamingResponse
 import logging
+from typing import Any
 
 logger = logging.getLogger(__name__)
 

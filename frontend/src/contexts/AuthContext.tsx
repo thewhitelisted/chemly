@@ -5,7 +5,7 @@ import { apiConfig } from '../config/api';
 interface User {
   id: string;
   email: string;
-  role: string;
+  role: 'user' | 'admin' | 'moderator';
   subscription_plan: string;
   basic_credits_used: number;
   basic_credits_limit: number;

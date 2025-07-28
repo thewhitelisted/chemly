@@ -364,6 +364,12 @@ export function Sidebar({ molecule, onMoleculeChange }: SidebarProps) {
               </div>
             </div>
             <div className="pt-2 border-t border-gray-200 dark:border-zinc-600 space-y-2">
+              {/* Debug info - remove in production */}
+              {import.meta.env.DEV && (
+                <div className="text-xs text-gray-500 mb-2">
+                  Debug: Role = {user?.role || 'undefined'}
+                </div>
+              )}
               {/* Admin Panel Button - Only show for admin users */}
               {(user?.role === 'admin') && (
                 <button
