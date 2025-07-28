@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { User, Crown, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
+import { Crown, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 import { apiConfig } from '../config/api';
 import { useAuth } from '../contexts/AuthContext';
 
